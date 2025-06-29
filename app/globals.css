@@ -1,0 +1,570 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+
+    /* Updated to use grayscale colors for a more professional look */
+    --primary: 220 13% 18%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 13% 18%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 8% 46%;
+
+    --accent: 220 14% 96%;
+    --accent-foreground: 220 13% 18%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 220 13% 18%;
+
+    --radius: 6px;
+
+    /* Status colors - more subdued professional tones */
+    --success: 142 72% 29%;
+    --success-foreground: 0 0% 100%;
+    --success-muted: 142 76% 97%;
+    --success-muted-foreground: 142 72% 29%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --warning-muted: 38 92% 95%;
+    --warning-muted-foreground: 38 92% 30%;
+
+    --info: 221 83% 53%;
+    --info-foreground: 0 0% 100%;
+    --info-muted: 221 83% 96%;
+    --info-muted-foreground: 221 83% 53%;
+
+    --error: 0 84% 60%;
+    --error-foreground: 0 0% 100%;
+    --error-muted: 0 84% 96%;
+    --error-muted-foreground: 0 84% 60%;
+
+    /* Sidebar colors */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 0%;
+    --sidebar-muted: 0 0% 45%;
+    --sidebar-muted-foreground: 0 0% 45%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 220 13% 18%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-primary: 220 13% 18%;
+    --sidebar-primary-foreground: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 220 13% 8%;
+    --foreground: 0 0% 100%;
+
+    --card: 220 13% 10%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 220 13% 10%;
+    --popover-foreground: 0 0% 100%;
+
+    /* Updated to use grayscale colors for a more professional look */
+    --primary: 220 13% 85%;
+    --primary-foreground: 220 13% 10%;
+
+    --secondary: 220 13% 16%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 220 13% 16%;
+    --muted-foreground: 220 13% 65%;
+
+    --accent: 220 13% 16%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 20%;
+    --input: 220 13% 20%;
+    --ring: 220 13% 85%;
+
+    /* Status colors - more subdued professional tones for dark mode */
+    --success: 142 72% 40%;
+    --success-foreground: 0 0% 100%;
+    --success-muted: 142 46% 15%;
+    --success-muted-foreground: 142 72% 70%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --warning-muted: 38 92% 15%;
+    --warning-muted-foreground: 38 92% 70%;
+
+    --info: 221 83% 53%;
+    --info-foreground: 0 0% 100%;
+    --info-muted: 221 83% 15%;
+    --info-muted-foreground: 221 83% 70%;
+
+    --error: 0 84% 60%;
+    --error-foreground: 0 0% 100%;
+    --error-muted: 0 84% 15%;
+    --error-muted-foreground: 0 84% 70%;
+
+    /* Sidebar colors */
+    --sidebar-background: 220 13% 8%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-muted: 220 13% 65%;
+    --sidebar-muted-foreground: 220 13% 65%;
+    --sidebar-accent: 220 13% 16%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 13% 20%;
+    --sidebar-primary: 220 13% 85%;
+    --sidebar-primary-foreground: 220 13% 10%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif,
+      "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  /* Consistent heading styles */
+  h1 {
+    @apply text-4xl font-bold tracking-tight;
+    line-height: 1.2;
+  }
+
+  h2 {
+    @apply text-3xl font-semibold tracking-tight;
+    line-height: 1.2;
+  }
+
+  h3 {
+    @apply text-2xl font-semibold tracking-tight;
+    line-height: 1.2;
+  }
+
+  h4 {
+    @apply text-xl font-semibold tracking-tight;
+    line-height: 1.25;
+  }
+
+  h5 {
+    @apply text-lg font-medium;
+    line-height: 1.25;
+  }
+
+  h6 {
+    @apply text-base font-medium;
+    line-height: 1.25;
+  }
+
+  p {
+    @apply text-base leading-normal;
+    margin-bottom: 1rem;
+  }
+
+  small {
+    @apply text-sm;
+  }
+
+  /* Improved focus styles for better accessibility */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  .text-heading-1 {
+    @apply text-4xl font-bold tracking-tight;
+    line-height: 1.2;
+  }
+
+  .text-heading-2 {
+    @apply text-3xl font-semibold tracking-tight;
+    line-height: 1.2;
+  }
+
+  .text-heading-3 {
+    @apply text-2xl font-semibold tracking-tight;
+    line-height: 1.2;
+  }
+
+  .text-heading-4 {
+    @apply text-xl font-semibold tracking-tight;
+    line-height: 1.25;
+  }
+
+  .text-title {
+    @apply text-lg font-medium;
+    line-height: 1.25;
+  }
+
+  .text-subtitle {
+    @apply text-base font-medium text-muted-foreground;
+  }
+
+  .text-body {
+    @apply text-base leading-normal;
+  }
+
+  .text-body-small {
+    @apply text-sm leading-normal;
+  }
+
+  .text-caption {
+    @apply text-xs leading-normal;
+  }
+
+  .text-overline {
+    @apply text-xs uppercase tracking-wider font-medium;
+  }
+
+  /* Safe area insets for mobile */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .pr-safe {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .pl-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+
+  /* Mobile-specific utilities */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  .no-select {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .native-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: none;
+  }
+
+  /* Responsive utilities */
+  .hide-on-mobile {
+    @apply hidden sm:block;
+  }
+
+  .show-on-mobile {
+    @apply block sm:hidden;
+  }
+
+  .mobile-full-width {
+    @apply w-full sm:w-auto;
+  }
+
+  .mobile-stack {
+    @apply flex-col sm:flex-row;
+  }
+
+  .mobile-center {
+    @apply justify-center text-center sm:justify-start sm:text-left;
+  }
+
+  /* Responsive typography */
+  .mobile-text-sm {
+    @apply text-sm sm:text-base;
+  }
+
+  .mobile-text-base {
+    @apply text-base sm:text-lg;
+  }
+
+  .mobile-text-lg {
+    @apply text-lg sm:text-xl;
+  }
+
+  .mobile-text-xl {
+    @apply text-xl sm:text-2xl;
+  }
+
+  .mobile-text-2xl {
+    @apply text-2xl sm:text-3xl;
+  }
+
+  /* Responsive spacing */
+  .mobile-p-2 {
+    @apply p-2 sm:p-4;
+  }
+
+  .mobile-p-4 {
+    @apply p-4 sm:p-6;
+  }
+
+  .mobile-px-2 {
+    @apply px-2 sm:px-4;
+  }
+
+  .mobile-px-4 {
+    @apply px-4 sm:px-6;
+  }
+
+  .mobile-py-2 {
+    @apply py-2 sm:py-4;
+  }
+
+  .mobile-py-4 {
+    @apply py-4 sm:py-6;
+  }
+
+  .mobile-m-2 {
+    @apply m-2 sm:m-4;
+  }
+
+  .mobile-m-4 {
+    @apply m-4 sm:m-6;
+  }
+
+  .mobile-gap-2 {
+    @apply gap-2 sm:gap-4;
+  }
+
+  .mobile-gap-4 {
+    @apply gap-4 sm:gap-6;
+  }
+
+  /* Email content styling */
+  .normal-font {
+    font-style: normal !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+
+  .email-content {
+    font-style: normal;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease forwards;
+}
+
+.animate-slide-down {
+  animation: slideDown 0.3s ease forwards;
+}
+
+/* Pull to refresh animation */
+@keyframes pull-indicator-rotation {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pull-indicator {
+  animation: pull-indicator-rotation 1s linear infinite;
+}
+
+/* Native-like sheet animations */
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.sheet-animation {
+  animation: sheet-in 0.3s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/* Android-style ripple effect */
+.android-ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.android-ripple::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.5);
+  opacity: 0;
+  border-radius: 100%;
+  transform: scale(1, 1) translate(-50%, -50%);
+  transform-origin: 50% 50%;
+}
+
+.android-ripple:active::after {
+  animation: ripple 0.4s ease-out;
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0, 0);
+    opacity: 0.5;
+  }
+  20% {
+    transform: scale(25, 25);
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(40, 40);
+  }
+}
+
+/* Shimmer effect for loading states */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted) / 0.5) 0%,
+    hsl(var(--muted) / 0.7) 50%,
+    hsl(var(--muted) / 0.5) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Responsive card styling */
+.responsive-card {
+  @apply w-full sm:w-auto rounded-lg border shadow-sm overflow-hidden;
+}
+
+/* Responsive grid styling */
+.responsive-grid {
+  @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6;
+}
+
+/* Responsive container styling */
+.responsive-container {
+  @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+/* Responsive tabs styling */
+.responsive-tabs {
+  @apply w-full;
+}
+
+.responsive-tabs-list {
+  @apply flex overflow-x-auto sm:overflow-visible;
+}
+
+/* Responsive dialog styling */
+.responsive-dialog {
+  @apply w-full sm:max-w-lg;
+}
+
+/* Bottom sheet styling */
+.bottom-sheet {
+  @apply rounded-t-xl;
+}
+
+.bottom-sheet-handle {
+  @apply w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-4;
+}
+
+/* Page container styling */
+.page-container {
+  @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-16;
+}
+
+/* Mobile header styling */
+.mobile-header {
+  @apply fixed top-0 left-0 right-0 z-40 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 h-14 flex items-center justify-between px-4;
+}
+
+/* Mobile footer styling */
+.mobile-footer {
+  @apply fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 h-16 flex items-center justify-around px-4;
+}
