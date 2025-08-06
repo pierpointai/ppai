@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   LogOut,
   User,
+  BarChart3,
   Package,
   Calculator,
   TrendingUp,
@@ -161,10 +162,24 @@ export function AppSidebar({
 
           {!isCollapsed && (
             <div className="px-3 mb-2">
-              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Tools</div>
+              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Analysis</div>
             </div>
           )}
           <nav className="grid gap-1 px-2 mb-4">
+            <Link
+              href="/comparison"
+              className={cn(
+                "sidebar-menu-button flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                pathname === "/comparison"
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              data-active={pathname === "/comparison"}
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span className="sidebar-text">Comparison</span>
+            </Link>
+
             <Link
               href="/voyage-calculator"
               className={cn(

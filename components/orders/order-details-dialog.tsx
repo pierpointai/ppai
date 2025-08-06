@@ -1,12 +1,19 @@
 "use client"
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
-import { Ship, MapPin, Calendar, DollarSign, Package } from "lucide-react"
+import { Calendar, MapPin, Package, Ship, User, DollarSign, Navigation } from "lucide-react"
 import { LinkedVesselsTable } from "./linked-vessels-table"
-import type { Order } from "@/lib/store/order-store"
+import { useState, useEffect } from "react"
+import { VesselLinkingDialog } from "./vessel-linking-dialog"
+import { useOfferStore } from "@/lib/store/offer-store"
+import { calculateVesselProximity } from "@/lib/enhanced-matching"
+import { useOrderStore } from "@/lib/store/order-store"
+import type { Order } from "@/lib/types/orders"
+import { toast } from "@/components/ui/use-toast"
 
 interface OrderDetailsDialogProps {
   open: boolean
@@ -15,226 +22,352 @@ interface OrderDetailsDialogProps {
 }
 
 export function OrderDetailsDialog({ open, onOpenChange, order }: OrderDetailsDialogProps) {
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    } catch {
-      return dateString
+  const [showVesselLinking, setShowVesselLinking] = useState(false)
+  const { offers } = useOfferStore()
+  const { updateOrder, linkVessel } = useOrderStore()
+  const [nearbyVessels, setNearbyVessels] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const fetchNearbyVessels = async () => {
+      setLoading(true)
+      const availableVessels = offers.filter((offer) => offer.status === "available" || !offer.status)
+      const vessels = []
+
+      for (const vessel of availableVessels) {
+        const vesselPort = vessel.openPort || vessel.loadPort || ""
+        const distance = calculateVesselProximity(vesselPort, order.loadPort)
+
+        if (distance !== null && distance <= 200) {
+          // Within 200 NM
+          vessels.push({
+            ...vessel,
+            distance,
+          })
+        }
+      }
+
+      setNearbyVessels(vessels.sort((a, b) => a.distance - b.distance).slice(0, 5))
+      setLoading(false)
     }
-  }
+
+    fetchNearbyVessels()
+  }, [offers, order, open])
+
+  // Add this effect after the existing useEffect for fetchNearbyVessels
+  useEffect(() => {
+    if (open) {
+      // Force a refresh of the order data from the store
+      const { orders } = useOrderStore.getState()
+      const updatedOrder = orders.find((o) => o.id === order.id)
+      if (updatedOrder && updatedOrder.linkedVessels !== order.linkedVessels) {
+        // The order has been updated, we should refresh
+        console.log("Order updated, refreshing dialog")
+      }
+    }
+  }, [open, order.id])
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Active":
-        return "bg-green-100 text-green-800 border-green-300"
+        return "bg-blue-50 text-blue-700 border-blue-200"
       case "Matched":
-        return "bg-blue-100 text-blue-800 border-blue-300"
+        return "bg-amber-50 text-amber-700 border-amber-200"
       case "Fixed":
-        return "bg-purple-100 text-purple-800 border-purple-300"
-      case "Cancelled":
-        return "bg-red-100 text-red-800 border-red-300"
+        return "bg-green-50 text-green-700 border-green-200"
       default:
-        return "bg-gray-100 text-gray-800 border-gray-300"
+        return "bg-gray-50 text-gray-700 border-gray-200"
     }
   }
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case "High":
-        return "bg-red-100 text-red-800 border-red-300"
-      case "Medium":
-        return "bg-amber-100 text-amber-800 border-amber-300"
-      case "Low":
-        return "bg-green-100 text-green-800 border-green-300"
+      case "high":
+        return "bg-red-50 text-red-700 border-red-200"
+      case "medium":
+        return "bg-amber-50 text-amber-700 border-amber-200"
+      case "low":
+        return "bg-green-50 text-green-700 border-green-200"
       default:
-        return "bg-gray-100 text-gray-800 border-gray-300"
+        return "bg-gray-50 text-gray-700 border-gray-200"
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Ship className="h-5 w-5" />
-            Order Details - {order.name || `#${order.id.slice(-4)}`}
-          </DialogTitle>
-        </DialogHeader>
+  const getDistanceColor = (distance: number) => {
+    if (distance <= 50) return "bg-green-100 text-green-800 border-green-300"
+    if (distance <= 100) return "bg-blue-100 text-blue-800 border-blue-300"
+    if (distance <= 200) return "bg-amber-100 text-amber-800 border-amber-300"
+    return "bg-red-100 text-red-800 border-red-300"
+  }
 
-        <div className="space-y-6">
-          {/* Header Info */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Badge variant="outline" className={getStatusColor(order.status)}>
-                {order.status}
-              </Badge>
-              {order.priority && (
+  const handleLinkVessels = () => {
+    console.log("Opening vessel linking dialog for order:", order.id)
+    setShowVesselLinking(true)
+  }
+
+  const handleCloseLinking = (linkedVessels: any[]) => {
+    console.log("Closing vessel linking dialog with linked vessels:", linkedVessels)
+    setShowVesselLinking(false)
+    if (linkedVessels.length > 0) {
+      updateOrder({ ...order, linkedVessels })
+      toast({
+        title: "Success",
+        description: "Vessels linked successfully.",
+        variant: "default",
+      })
+    }
+  }
+
+  const handleAddNearbyVessel = (vessel: any) => {
+    // Convert the nearby vessel to the format expected by linkVessel
+    const vesselToLink = {
+      id: vessel.id,
+      name: vessel.vesselName,
+      vesselId: vessel.id,
+      vesselName: vessel.vesselName,
+      vesselType: vessel.vesselType || "Bulk Carrier",
+      dwt: vessel.vesselSize || 0,
+      built: vessel.vesselAge ? new Date().getFullYear() - vessel.vesselAge : 2020,
+      flag: vessel.vesselFlag || "Unknown",
+      openPort: vessel.openPort || vessel.loadPort,
+      laycanStart: vessel.laycanStart || new Date().toISOString(),
+      laycanEnd: vessel.laycanEnd || new Date().toISOString(),
+      matchScore: Math.round(95 - vessel.distance * 0.2), // Higher score for closer vessels
+      status: "Shortlisted" as const,
+      linkedAt: new Date().toISOString(),
+    }
+
+    linkVessel(order.id, vesselToLink)
+
+    toast({
+      title: "Vessel Added",
+      description: `${vessel.vesselName} has been linked to this order.`,
+      variant: "default",
+    })
+  }
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle>Order Details</DialogTitle>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs">
+                  {order.orderType} Order
+                </Badge>
                 <Badge variant="outline" className={getPriorityColor(order.priority)}>
                   {order.priority} Priority
                 </Badge>
-              )}
-              <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-300">
-                {order.orderType}
-              </Badge>
+              </div>
             </div>
-            <div className="text-sm text-muted-foreground">Created {formatDate(order.createdAt)}</div>
-          </div>
+            <p className="text-sm text-muted-foreground">
+              #{order.id.substring(0, 8)} • Created {format(new Date(order.createdAt), "MMM dd, yyyy")}
+            </p>
+          </DialogHeader>
 
-          {/* Main Details Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Cargo Information */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Package className="h-4 w-4" />
-                  Cargo Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Cargo Type:</span>
-                  <span className="font-medium">{order.cargoType}</span>
+          <div className="space-y-4 mt-4">
+            <div className="flex items-center justify-between">
+              <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
+              {order.linkedVessels && order.linkedVessels.length > 0 && (
+                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <Ship className="h-4 w-4" />
+                  {order.linkedVessels.length} vessel{order.linkedVessels.length !== 1 ? "s" : ""} linked
                 </div>
-                {order.cargoQuantity && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Quantity:</span>
-                    <span className="font-medium">
-                      {order.cargoQuantity.toLocaleString()} {order.cargoUnit || "MT"}
-                    </span>
+              )}
+            </div>
+
+            <Separator />
+
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <Package className="h-4 w-4 mt-1 text-muted-foreground" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Cargo Type</p>
+                    <p className="text-sm text-muted-foreground">{order.cargoType}</p>
+                    {order.cargoQuantity && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {order.cargoQuantity.toLocaleString()} {order.cargoUnit || "MT"}
+                      </p>
+                    )}
                   </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">DWT Range:</span>
-                  <span className="font-medium">
-                    {order.dwtMin?.toLocaleString() || "N/A"} - {order.dwtMax?.toLocaleString() || "N/A"} MT
-                  </span>
                 </div>
-                {order.maxAge && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Max Age:</span>
-                    <span className="font-medium">{order.maxAge} years</span>
+
+                <div className="flex items-start gap-3">
+                  <Ship className="h-4 w-4 mt-1 text-muted-foreground" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">DWT Range</p>
+                    <p className="text-sm text-muted-foreground">
+                      {order.dwtMin.toLocaleString()} - {order.dwtMax.toLocaleString()} MT
+                    </p>
+                    {order.maxAge && (
+                      <p className="text-xs text-muted-foreground mt-1">Max vessel age: {order.maxAge} years</p>
+                    )}
+                    {order.gearRequirement && (
+                      <p className="text-xs text-muted-foreground mt-1">Gear: {order.gearRequirement}</p>
+                    )}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </div>
 
-            {/* Route Information */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapPin className="h-4 w-4" />
-                  Route Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Load Port:</span>
-                  <span className="font-medium">{order.loadPort}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Discharge Port:</span>
-                  <span className="font-medium">{order.dischargePort}</span>
-                </div>
-                {order.tradeLane && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Trade Lane:</span>
-                    <span className="font-medium">{order.tradeLane}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Schedule Information */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Schedule Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Laycan Start:</span>
-                  <span className="font-medium">{formatDate(order.laycanStart)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Laycan End:</span>
-                  <span className="font-medium">{formatDate(order.laycanEnd)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Duration:</span>
-                  <span className="font-medium">
-                    {Math.ceil(
-                      (new Date(order.laycanEnd).getTime() - new Date(order.laycanStart).getTime()) /
-                        (1000 * 60 * 60 * 24),
-                    )}{" "}
-                    days
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Commercial Information */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
-                  Commercial Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
                 {order.charterer && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Charterer:</span>
-                    <span className="font-medium">{order.charterer}</span>
+                  <div className="flex items-start gap-3">
+                    <User className="h-4 w-4 mt-1 text-muted-foreground" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Charterer</p>
+                      <p className="text-sm text-muted-foreground">{order.charterer}</p>
+                    </div>
                   </div>
                 )}
-                {order.freightRate && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Freight Rate:</span>
-                    <span className="font-medium">
-                      ${order.freightRate.toLocaleString()} {order.freightRateUnit || ""}
-                    </span>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <Calendar className="h-4 w-4 mt-1 text-muted-foreground" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Laycan Window</p>
+                    <p className="text-sm text-muted-foreground">
+                      {format(new Date(order.laycanStart), "MMM dd, yyyy")} -{" "}
+                      {format(new Date(order.laycanEnd), "MMM dd, yyyy")}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <MapPin className="h-4 w-4 mt-1 text-muted-foreground" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Route</p>
+                    <p className="text-sm text-muted-foreground">
+                      {order.loadPort} → {order.dischargePort}
+                    </p>
+                    {order.tradeLane && (
+                      <p className="text-xs text-muted-foreground mt-1">Trade Lane: {order.tradeLane}</p>
+                    )}
+                  </div>
+                </div>
+
+                {(order.freightRate || order.commissionRate) && (
+                  <div className="flex items-start gap-3">
+                    <DollarSign className="h-4 w-4 mt-1 text-muted-foreground" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Commercial Terms</p>
+                      {order.freightRate && (
+                        <p className="text-sm text-muted-foreground">
+                          Rate: {order.freightRate} {order.freightRateUnit || "USD"}
+                        </p>
+                      )}
+                      {order.commissionRate && (
+                        <p className="text-xs text-muted-foreground mt-1">Commission: {order.commissionRate}%</p>
+                      )}
+                    </div>
                   </div>
                 )}
-                {order.commission && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Commission:</span>
-                    <span className="font-medium">{order.commission}%</span>
+              </div>
+            </div>
+
+            {/* Nearby Vessels Section */}
+            {nearbyVessels.length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Navigation className="h-4 w-4 text-blue-600" />
+                    <h3 className="text-sm font-medium">Nearby Vessels</h3>
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                      {nearbyVessels.length} within 200 NM
+                    </Badge>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  <div className="grid gap-2">
+                    {nearbyVessels.map((vessel) => (
+                      <div
+                        key={vessel.id}
+                        className="flex items-center justify-between p-3 bg-blue-50/50 rounded-lg border border-blue-200"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded bg-blue-100 flex items-center justify-center">
+                            <Ship className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-sm">{vessel.vesselName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {vessel.vesselSize}k DWT • {vessel.vesselAge} years • {vessel.vesselFlag}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-right text-xs text-muted-foreground">
+                            <div>Open: {vessel.openPort || vessel.loadPort}</div>
+                            <div>{vessel.openDates || "Available now"}</div>
+                          </div>
+                          <Badge variant="outline" className={getDistanceColor(vessel.distance)}>
+                            {Math.round(vessel.distance)} NM
+                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="ml-2 h-7 px-2 text-xs bg-blue-600 text-white hover:bg-blue-700 border-blue-600"
+                            onClick={() => handleAddNearbyVessel(vessel)}
+                            disabled={order.linkedVessels?.some((lv) => lv.vesselId === vessel.id)}
+                          >
+                            {order.linkedVessels?.some((lv) => lv.vesselId === vessel.id) ? "Added" : "Add"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {order.specialRequirements && order.specialRequirements.length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-sm font-medium mb-2">Special Requirements</p>
+                  <div className="flex flex-wrap gap-2">
+                    {order.specialRequirements.map((req, index) => (
+                      <Badge key={index} variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                        {req}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {order.notes && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-sm font-medium mb-2">Notes</p>
+                  <p className="text-sm text-muted-foreground">{order.notes}</p>
+                </div>
+              </>
+            )}
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <Ship className="h-4 w-4" />
+                  Linked Vessels
+                </h3>
+                <Button variant="outline" size="sm" onClick={handleLinkVessels}>
+                  Link Vessels
+                </Button>
+              </div>
+              <LinkedVesselsTable orderId={order.id} linkedVessels={order.linkedVessels || []} />
+            </div>
           </div>
+        </DialogContent>
+      </Dialog>
 
-          {/* Notes */}
-          {order.notes && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Notes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">{order.notes}</p>
-              </CardContent>
-            </Card>
-          )}
-
-          <Separator />
-
-          {/* Linked Vessels */}
-          <div>
-            <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
-              <Ship className="h-5 w-5" />
-              Linked Vessels ({order.linkedVessels?.length || 0})
-            </h3>
-            <LinkedVesselsTable orderId={order.id} />
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+      {/* Vessel Linking Dialog */}
+      {showVesselLinking && (
+        <VesselLinkingDialog open={showVesselLinking} onOpenChange={handleCloseLinking} order={order} />
+      )}
+    </>
   )
 }

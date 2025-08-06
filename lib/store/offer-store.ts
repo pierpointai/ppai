@@ -88,157 +88,133 @@ export const useOfferStore = create<OfferStore>()(
         // Actions
         addOffer: (offer) => {
           const startTime = performance.now()
+          const currentState = get()
+          const newOffers = [...currentState.offers, offer]
+          const newFilteredOffers = memoizedRankOffers(
+            memoizedFilterOffers(newOffers, currentState.filters),
+            currentState.rankingWeights,
+          )
 
-          set((state) => {
-            const newOffers = [...state.offers, offer]
-            const newFilteredOffers = memoizedRankOffers(
-              memoizedFilterOffers(newOffers, state.filters),
-              state.rankingWeights,
-            )
-            const endTime = performance.now()
-
-            return {
-              offers: newOffers,
-              filteredOffers: newFilteredOffers,
-              lastUpdated: new Date(),
-              processingTime: endTime - startTime,
-            }
+          set({
+            offers: newOffers,
+            filteredOffers: newFilteredOffers,
+            lastUpdated: new Date(),
+            processingTime: performance.now() - startTime,
           })
         },
 
         addOffers: (newOffers) => {
           const startTime = performance.now()
+          const currentState = get()
+          const updatedOffers = [...currentState.offers, ...newOffers]
+          const newFilteredOffers = memoizedRankOffers(
+            memoizedFilterOffers(updatedOffers, currentState.filters),
+            currentState.rankingWeights,
+          )
 
-          set((state) => {
-            const updatedOffers = [...state.offers, ...newOffers]
-            const newFilteredOffers = memoizedRankOffers(
-              memoizedFilterOffers(updatedOffers, state.filters),
-              state.rankingWeights,
-            )
-            const endTime = performance.now()
-
-            return {
-              offers: updatedOffers,
-              filteredOffers: newFilteredOffers,
-              lastUpdated: new Date(),
-              processingTime: endTime - startTime,
-            }
+          set({
+            offers: updatedOffers,
+            filteredOffers: newFilteredOffers,
+            lastUpdated: new Date(),
+            processingTime: performance.now() - startTime,
           })
         },
 
         updateOffer: (id, updates) => {
           const startTime = performance.now()
+          const currentState = get()
+          const offerIndex = currentState.offers.findIndex((o) => o.id === id)
+          if (offerIndex === -1) return
 
-          set((state) => {
-            const offerIndex = state.offers.findIndex((o) => o.id === id)
-            if (offerIndex === -1) return state
+          const updatedOffers = [...currentState.offers]
+          updatedOffers[offerIndex] = { ...updatedOffers[offerIndex], ...updates }
 
-            // Update the offer
-            const updatedOffers = [...state.offers]
-            updatedOffers[offerIndex] = { ...updatedOffers[offerIndex], ...updates }
+          const newFilteredOffers = memoizedRankOffers(
+            memoizedFilterOffers(updatedOffers, currentState.filters),
+            currentState.rankingWeights,
+          )
 
-            // Update filtered offers
-            const newFilteredOffers = memoizedRankOffers(
-              memoizedFilterOffers(updatedOffers, state.filters),
-              state.rankingWeights,
-            )
+          // Update selected offer if it's the one being updated
+          let updatedSelectedOffer = currentState.selectedOffer
+          if (currentState.selectedOffer?.id === id) {
+            updatedSelectedOffer = { ...currentState.selectedOffer, ...updates }
+          }
 
-            // Update selected offer if it's the one being updated
-            let updatedSelectedOffer = state.selectedOffer
-            if (state.selectedOffer?.id === id) {
-              updatedSelectedOffer = { ...state.selectedOffer, ...updates }
-            }
+          // Update compare offers if any are being updated
+          const updatedCompareOffers = currentState.compareOffers.map((o) => 
+            o.id === id ? { ...o, ...updates } : o
+          )
 
-            // Update compare offers if any are being updated
-            const updatedCompareOffers = state.compareOffers.map((o) => (o.id === id ? { ...o, ...updates } : o))
-
-            const endTime = performance.now()
-
-            return {
-              offers: updatedOffers,
-              filteredOffers: newFilteredOffers,
-              selectedOffer: updatedSelectedOffer,
-              compareOffers: updatedCompareOffers,
-              lastUpdated: new Date(),
-              processingTime: endTime - startTime,
-            }
+          set({
+            offers: updatedOffers,
+            filteredOffers: newFilteredOffers,
+            selectedOffer: updatedSelectedOffer,
+            compareOffers: updatedCompareOffers,
+            lastUpdated: new Date(),
+            processingTime: performance.now() - startTime,
           })
         },
 
         batchUpdateOffers: (updates) => {
           const startTime = performance.now()
+          const currentState = get()
+          const updateMap = new Map(updates.map((update) => [update.id, update.updates]))
 
-          set((state) => {
-            const updateMap = new Map(updates.map((update) => [update.id, update.updates]))
-            const updatedOffers = [...state.offers]
+          const updatedOffers = currentState.offers.map((offer) => {
+            const offerUpdates = updateMap.get(offer.id)
+            return offerUpdates ? { ...offer, ...offerUpdates } : offer
+          })
 
-            // Apply all updates at once
-            for (let i = 0; i < updatedOffers.length; i++) {
-              const offer = updatedOffers[i]
-              const offerUpdates = updateMap.get(offer.id)
-              if (offerUpdates) {
-                updatedOffers[i] = { ...offer, ...offerUpdates }
-              }
+          const newFilteredOffers = memoizedRankOffers(
+            memoizedFilterOffers(updatedOffers, currentState.filters),
+            currentState.rankingWeights,
+          )
+
+          // Update selected offer if needed
+          let updatedSelectedOffer = currentState.selectedOffer
+          if (currentState.selectedOffer && updateMap.has(currentState.selectedOffer.id)) {
+            updatedSelectedOffer = {
+              ...currentState.selectedOffer,
+              ...updateMap.get(currentState.selectedOffer.id),
             }
+          }
 
-            // Update filtered offers
-            const newFilteredOffers = memoizedRankOffers(
-              memoizedFilterOffers(updatedOffers, state.filters),
-              state.rankingWeights,
-            )
+          // Update compare offers if needed
+          const updatedCompareOffers = currentState.compareOffers.map((offer) => {
+            const offerUpdates = updateMap.get(offer.id)
+            return offerUpdates ? { ...offer, ...offerUpdates } : offer
+          })
 
-            // Update selected offer if needed
-            let updatedSelectedOffer = state.selectedOffer
-            if (state.selectedOffer && updateMap.has(state.selectedOffer.id)) {
-              updatedSelectedOffer = {
-                ...state.selectedOffer,
-                ...updateMap.get(state.selectedOffer.id),
-              }
-            }
-
-            // Update compare offers if needed
-            const updatedCompareOffers = state.compareOffers.map((offer) => {
-              const offerUpdates = updateMap.get(offer.id)
-              return offerUpdates ? { ...offer, ...offerUpdates } : offer
-            })
-
-            const endTime = performance.now()
-
-            return {
-              offers: updatedOffers,
-              filteredOffers: newFilteredOffers,
-              selectedOffer: updatedSelectedOffer,
-              compareOffers: updatedCompareOffers,
-              lastUpdated: new Date(),
-              processingTime: endTime - startTime,
-            }
+          set({
+            offers: updatedOffers,
+            filteredOffers: newFilteredOffers,
+            selectedOffer: updatedSelectedOffer,
+            compareOffers: updatedCompareOffers,
+            lastUpdated: new Date(),
+            processingTime: performance.now() - startTime,
           })
         },
 
         removeOffer: (id) => {
-          set((state) => {
-            // Remove the offer
-            const newOffers = state.offers.filter((o) => o.id !== id)
+          const currentState = get()
+          const newOffers = currentState.offers.filter((o) => o.id !== id)
+          const newFilteredOffers = memoizedRankOffers(
+            memoizedFilterOffers(newOffers, currentState.filters),
+            currentState.rankingWeights,
+          )
 
-            // Update filtered offers
-            const newFilteredOffers = memoizedRankOffers(
-              memoizedFilterOffers(newOffers, state.filters),
-              state.rankingWeights,
-            )
+          // Clear selected offer if it's the one being removed
+          const newSelectedOffer = currentState.selectedOffer?.id === id ? null : currentState.selectedOffer
 
-            // Clear selected offer if it's the one being removed
-            const newSelectedOffer = state.selectedOffer?.id === id ? null : state.selectedOffer
+          // Remove from compare offers if present
+          const newCompareOffers = currentState.compareOffers.filter((o) => o.id !== id)
 
-            // Remove from compare offers if present
-            const newCompareOffers = state.compareOffers.filter((o) => o.id !== id)
-
-            return {
-              offers: newOffers,
-              filteredOffers: newFilteredOffers,
-              selectedOffer: newSelectedOffer,
-              compareOffers: newCompareOffers,
-              lastUpdated: new Date(),
-            }
+          set({
+            offers: newOffers,
+            filteredOffers: newFilteredOffers,
+            selectedOffer: newSelectedOffer,
+            compareOffers: newCompareOffers,
+            lastUpdated: new Date(),
           })
         },
 
@@ -262,26 +238,25 @@ export const useOfferStore = create<OfferStore>()(
         },
 
         toggleCompareOffer: (offer) => {
-          set((state) => {
-            const isAlreadyComparing = state.compareOffers.some((o) => o.id === offer.id)
+          const currentState = get()
+          const isAlreadyComparing = currentState.compareOffers.some((o) => o.id === offer.id)
 
-            if (isAlreadyComparing) {
-              return {
-                compareOffers: state.compareOffers.filter((o) => o.id !== offer.id),
-              }
-            } else {
-              // Limit to 4 offers for comparison to avoid performance issues
-              const newCompareOffers = [...state.compareOffers]
-              if (newCompareOffers.length >= 4) {
-                newCompareOffers.pop() // Remove the last one
-              }
-              newCompareOffers.unshift(offer) // Add new one at the beginning
-
-              return {
-                compareOffers: newCompareOffers,
-              }
+          if (isAlreadyComparing) {
+            set({
+              compareOffers: currentState.compareOffers.filter((o) => o.id !== offer.id),
+            })
+          } else {
+            // Limit to 4 offers for comparison to avoid performance issues
+            const newCompareOffers = [...currentState.compareOffers]
+            if (newCompareOffers.length >= 4) {
+              newCompareOffers.pop() // Remove the last one
             }
-          })
+            newCompareOffers.unshift(offer) // Add new one at the beginning
+
+            set({
+              compareOffers: newCompareOffers,
+            })
+          }
         },
 
         clearCompare: () => {
@@ -289,45 +264,42 @@ export const useOfferStore = create<OfferStore>()(
         },
 
         setRankingWeights: (weights) => {
-          set((state) => {
-            const normalizedWeights = normalizeWeights(weights)
-            const newFilteredOffers = memoizedRankOffers(
-              memoizedFilterOffers(state.offers, state.filters),
-              normalizedWeights,
-            )
+          const currentState = get()
+          const normalizedWeights = normalizeWeights(weights)
+          const newFilteredOffers = memoizedRankOffers(
+            memoizedFilterOffers(currentState.offers, currentState.filters),
+            normalizedWeights,
+          )
 
-            return {
-              rankingWeights: normalizedWeights,
-              filteredOffers: newFilteredOffers,
-              lastUpdated: new Date(),
-            }
+          set({
+            rankingWeights: normalizedWeights,
+            filteredOffers: newFilteredOffers,
+            lastUpdated: new Date(),
           })
         },
 
         setFilters: (filters) => {
-          set((state) => {
-            const newFilteredOffers = memoizedRankOffers(
-              memoizedFilterOffers(state.offers, filters),
-              state.rankingWeights,
-            )
+          const currentState = get()
+          const newFilteredOffers = memoizedRankOffers(
+            memoizedFilterOffers(currentState.offers, filters),
+            currentState.rankingWeights,
+          )
 
-            return {
-              filters,
-              filteredOffers: newFilteredOffers,
-              lastUpdated: new Date(),
-            }
+          set({
+            filters,
+            filteredOffers: newFilteredOffers,
+            lastUpdated: new Date(),
           })
         },
 
         resetFilters: () => {
-          set((state) => {
-            const newFilteredOffers = memoizedRankOffers(state.offers, state.rankingWeights)
+          const currentState = get()
+          const newFilteredOffers = memoizedRankOffers(currentState.offers, currentState.rankingWeights)
 
-            return {
-              filters: {},
-              filteredOffers: newFilteredOffers,
-              lastUpdated: new Date(),
-            }
+          set({
+            filters: {},
+            filteredOffers: newFilteredOffers,
+            lastUpdated: new Date(),
           })
         },
 
@@ -340,20 +312,17 @@ export const useOfferStore = create<OfferStore>()(
         },
 
         markOfferAsViewed: (id) => {
-          set((state) => {
-            const offerIndex = state.offers.findIndex((o) => o.id === id)
-            if (offerIndex === -1) return state
+          const currentState = get()
+          const offerIndex = currentState.offers.findIndex((o) => o.id === id)
+          if (offerIndex === -1) return
 
-            const updatedOffers = [...state.offers]
-            updatedOffers[offerIndex] = {
-              ...updatedOffers[offerIndex],
-              lastViewed: new Date(),
-            }
+          const updatedOffers = [...currentState.offers]
+          updatedOffers[offerIndex] = {
+            ...updatedOffers[offerIndex],
+            lastViewed: new Date(),
+          }
 
-            return {
-              offers: updatedOffers,
-            }
-          })
+          set({ offers: updatedOffers })
         },
       }),
       {

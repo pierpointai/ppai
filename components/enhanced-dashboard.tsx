@@ -8,44 +8,20 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
-import { Input } from "@/components/ui/input"
-import { Ship, Mail, RefreshCw, ChevronDown, Loader2, Search, Eye, TrendingUp } from "lucide-react"
+import { Ship, Mail, RefreshCw, ChevronDown, Loader2, Eye, TrendingUp } from "lucide-react"
 import { OfferDetails } from "@/components/offer-details"
 import { ClientRequestCard } from "@/components/client-request-card"
 import { formatDate, getVesselCategoryBySize } from "@/lib/offer-utils"
 import { getRandomOffer, getRandomOfferForCategory, MOCK_CLIENTS } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { VESSEL_CATEGORIES, CARGO_TYPES, TRADE_LANES, FLAGS } from "@/lib/types"
+import { VESSEL_CATEGORIES, CARGO_TYPES, TRADE_LANES } from "@/lib/types"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { motion, AnimatePresence } from "framer-motion"
-import { useTheme } from "next-themes"
 import type { Offer } from "@/lib/types"
 import { useRouter } from "next/navigation"
-import { ClientEmailMatcher } from "@/components/client-email-matcher"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { useSheetsVessels } from "@/hooks/use-sheety-vessels"
-import { SheetsSyncPanel } from "@/components/sheets-sync-panel"
 import { VesselTableNew } from "@/components/vessel-table-new"
+import { SheetsSyncPanel } from "@/components/sheets-sync-panel"
 
 interface MetricsBarProps {
   totalOffers: number
@@ -144,25 +120,63 @@ export function EnhancedDashboard() {
   const [pullStartY, setPullStartY] = useState(0)
   const [pullMoveY, setPullMoveY] = useState(0)
   const [isPulling, setIsPulling] = useState(false)
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
-  const [searchSheetOpen, setSearchSheetOpen] = useState(false)
-  const [sheetsDialogOpen, setSheetsDialogOpen] = useState(false)
+
+  // Consolidate these state declarations into a single object:
+  const [uiState, setUiState] = useState({
+    viewMode: "vesselTypes" as "vesselTypes" | "list",
+    searchTerm: "",
+    sortBy: "priority" as "score" | "rate" | "date" | "vessel" | "priority",
+    sortOrder: "desc" as "asc" | "desc",
+    activeTab: "urgent",
+    isLoading: false,
+    isInitialLoading: true,
+    filterSheetOpen: false,
+    searchSheetOpen: false,
+    sheetsDialogOpen: false,
+    clientEmailMatcherOpen: false,
+    isAddVesselDialogOpen: false,
+    isEditVesselDialogOpen: false,
+    isDeleteAlertOpen: false,
+    showDemurrage: false,
+    showScenarioComparison: false,
+    isExpanded: true,
+    settingsDialogOpen: false,
+    keyboardShortcutsOpen: false,
+    helpDialogOpen: false,
+    exportDialogOpen: false,
+    isFullscreen: false,
+    sidebarOpen: !isMobile,
+  })
 
   // State for mobile view
-  const [viewMode, setViewMode] = useState<"vesselTypes" | "list">("vesselTypes")
-  const [searchTerm, setSearchTerm] = useState("")
-  const [sortBy, setSortBy] = useState<"score" | "rate" | "date" | "vessel" | "priority">("priority")
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
-  const [clientEmailMatcherOpen, setClientEmailMatcherOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState("urgent")
-  const [filterDialogOpen, setFilterDialogOpen] = useState(false)
+  const {
+    viewMode,
+    searchTerm,
+    sortBy,
+    sortOrder,
+    activeTab,
+    isLoading,
+    isInitialLoading,
+    filterSheetOpen,
+    searchSheetOpen,
+    sheetsDialogOpen,
+    clientEmailMatcherOpen,
+    isAddVesselDialogOpen,
+    isEditVesselDialogOpen,
+    isDeleteAlertOpen,
+    isExpanded,
+    settingsDialogOpen,
+    keyboardShortcutsOpen,
+    helpDialogOpen,
+    exportDialogOpen,
+    isFullscreen,
+  } = uiState
+
   const [vesselTypeFilter, setVesselTypeFilter] = useState<string | null>(null)
   const [cargoTypeFilter, setCargoTypeFilter] = useState<string | null>(null)
   const [contractTypeFilter, setContractTypeFilter] = useState<string | null>(null)
   const [chartererFilter, setChartererFilter] = useState<string | null>(null)
   const [initialStatusFilter, setInitialStatusFilter] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [expandedVesselCategories, setExpandedVesselCategories] = useState<Record<string, boolean>>(() => {
     // Initialize with urgent categories expanded
     const initialState: Record<string, boolean> = {}
@@ -173,24 +187,17 @@ export function EnhancedDashboard() {
   })
 
   // Calculate metrics for broker dashboard
-  const metrics = useMemo(() => {
-    const today = new Date().toDateString()
-    const urgentOffers = filteredOffers.filter((o) => o.priority === "urgent").length
-    const fixedToday = filteredOffers.filter(
-      (o) => o.category === "Fixed" && o.lastUpdated && new Date(o.lastUpdated).toDateString() === today,
-    ).length
-    const onSubjects = filteredOffers.filter((o) => o.category === "On Subjects").length
-    const screenedToday = Math.floor(Math.random() * 25) + 15 // Mock data
-
-    return {
+  const metrics = useMemo(
+    () => ({
       totalOffers: offers.length,
       displayedOffers: filteredOffers.length,
-      screenedToday,
-      highPriority: urgentOffers,
-      fixedToday,
-      onSubjects,
-    }
-  }, [offers, filteredOffers])
+      screenedToday: Math.floor(Math.random() * 25) + 15,
+      highPriority: filteredOffers.filter((o) => o.priority === "urgent").length,
+      fixedToday: filteredOffers.filter((o) => o.category === "Fixed").length,
+      onSubjects: filteredOffers.filter((o) => o.category === "On Subjects").length,
+    }),
+    [offers, filteredOffers],
+  )
 
   // Pull to refresh functionality
   useEffect(() => {
@@ -257,7 +264,7 @@ export function EnhancedDashboard() {
 
   // Add realistic vessels for broker operations
   const handleAddRealisticVessels = () => {
-    setIsLoading(true)
+    setUiState((prev) => ({ ...prev, isLoading: true }))
 
     setTimeout(() => {
       // Add vessels across different categories with realistic distribution
@@ -300,273 +307,42 @@ export function EnhancedDashboard() {
         description: `Added ${Object.values(vesselDistribution).reduce((a, b) => a + b, 0)} new vessel positions.`,
       })
 
-      setIsLoading(false)
+      setUiState((prev) => ({ ...prev, isLoading: false }))
     }, 800)
   }
 
-  // Add this function at the beginning of the EnhancedDashboard component, right after the destructured useOfferStore hooks
-  const forceRefreshAllVessels = () => {
-    setIsLoading(true)
-
-    try {
-      // Clear existing offers from the store
-      const { clearOffers } = useOfferStore.getState()
-      clearOffers()
-
-      // Wait a moment to ensure state is updated
-      setTimeout(() => {
-        // Add a balanced distribution of vessels across all categories
-        const categoriesToAdd = {
-          Handysize: 20,
-          "Handymax/Supramax": 20,
-          Panamax: 18,
-          Kamsarmax: 18,
-          "Post-Panamax": 16,
-          Capesize: 16,
-          VLOC: 14,
-        }
-
-        // Add vessels for each category
-        for (const [category, count] of Object.entries(categoriesToAdd)) {
-          for (let i = 0; i < count; i++) {
-            try {
-              const newOffer = getRandomOfferForCategory(category)
-
-              // Ensure vessel type matches category
-              newOffer.vesselType = category
-
-              // Add dry cargo specific fields
-              newOffer.contractType = ["voyage", "time", "coa"][Math.floor(Math.random() * 3)]
-              newOffer.cargoType = CARGO_TYPES[Math.floor(Math.random() * CARGO_TYPES.length)]
-              newOffer.tradeLane = TRADE_LANES[Math.floor(Math.random() * TRADE_LANES.length)]
-              const MARKET_SEGMENTS = ["Major Bulks", "Minor Bulks", "Containers", "Gas", "Oil"]
-              newOffer.marketSegment = MARKET_SEGMENTS[Math.floor(Math.random() * MARKET_SEGMENTS.length)]
-              newOffer.bdiComparison = Math.floor(Math.random() * 40) - 20 // -20% to +20%
-
-              if (newOffer.contractType === "voyage") {
-                newOffer.freightTotal = Math.round(newOffer.freightRate * newOffer.vesselSize * 1000)
-                newOffer.demurrage = Math.round(newOffer.freightRate * 0.8)
-                newOffer.loadRate = Math.round(8000 + Math.random() * 7000)
-                newOffer.dischargeRate = Math.round(10000 + Math.random() * 10000)
-                newOffer.laydays = Math.round(3 + Math.random() * 5)
-              } else if (newOffer.contractType === "time") {
-                newOffer.duration = Math.round(30 + Math.random() * 335) // 1-12 months
-                newOffer.rateUnit = "k/day"
-              } else {
-                newOffer.duration = Math.round(90 + Math.random() * 275) // 3-12 months
-                newOffer.cargoQuantity = Math.round(newOffer.vesselSize * 1000 * (2 + Math.random() * 10))
-              }
-
-              // Assign to different categories for the kanban view
-              const categories = [
-                "New Inquiries",
-                "Active Negotiations",
-                "Countered",
-                "On Subs",
-                "Subject Lifted",
-                "Fixed",
-                "Failed",
-              ]
-              newOffer.category = categories[Math.floor(Math.random() * categories.length)]
-
-              addOffer(newOffer)
-            } catch (error) {
-              console.error(`Error adding ${category} vessel:`, error)
-            }
-          }
-        }
-
-        // Make sure all categories are expanded
-        const initialExpandedState: Record<string, boolean> = {}
-        VESSEL_CATEGORIES.forEach((category) => {
-          initialExpandedState[category] = false // Keep collapsed after refresh
-        })
-        setExpandedVesselCategories(initialExpandedState)
-
-        toast({
-          title: "Vessels refreshed",
-          description: `Added ${Object.values(categoriesToAdd).reduce((a, b) => a + b, 0)} vessels to the dashboard.`,
-        })
-
-        setIsLoading(false)
-      }, 500)
-    } catch (error) {
-      console.error("Error refreshing vessels:", error)
-      toast({
-        title: "Error",
-        description: "Failed to refresh vessels. Please try again.",
-        variant: "destructive",
-      })
-      setIsLoading(false)
-    }
-  }
-
   // Handle adding a vessel manually
-  const [isAddVesselDialogOpen, setIsAddVesselDialogOpen] = useState(false)
-  const [isEditVesselDialogOpen, setIsEditVesselDialogOpen] = useState(false)
-  const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false)
   const [currentVessel, setCurrentVessel] = useState<Offer | null>(null)
-  const [newVesselData, setNewVesselData] = useState<Partial<any>>({
-    vesselname: "",
-    type: "Handysize",
-    dwt: 32,
-    built: new Date().getFullYear() - 10,
-    flag: "Panama",
-    openport: "",
-    opendates: "",
-    nextport: "",
-    lastcargo: "",
-    ballast: "no",
-    laden: "no",
-    freightrate: 15,
-    commission: 2.5,
-    imo: "",
-    brokername: "",
-    company: "",
-    phonenumber: "",
-    email: "",
-  })
 
   const handleAddVesselManually = () => {
-    if (!newVesselData.vesselname || !newVesselData.openport) {
-      toast({
-        title: "Missing information",
-        description: "Please fill in vessel name and open port.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Transform the sheet data format to internal offer format
-    const vesselToAdd: Offer = {
-      id: Math.random().toString(36).substring(2, 9),
-      vesselName: newVesselData.vesselname,
-      vesselType: newVesselData.type || "Handysize",
-      vesselSize: newVesselData.dwt || 32,
-      vesselAge: newVesselData.built ? new Date().getFullYear() - newVesselData.built : 10,
-      vesselFlag: newVesselData.flag || "Panama",
-      openPort: newVesselData.openport,
-      openDates: newVesselData.opendates || "",
-      nextPort: newVesselData.nextport || "",
-      lastCargo: newVesselData.lastcargo || "",
-      freightRate: newVesselData.freightrate || 15,
-      commission: newVesselData.commission || 2.5,
-      imo: newVesselData.imo || "",
-      brokerName: newVesselData.brokername || "",
-      company: newVesselData.company || "",
-      phoneNumber: newVesselData.phonenumber || "",
-      email: newVesselData.email || "",
-      ballast: newVesselData.ballast === "yes",
-      laden: newVesselData.laden === "yes",
-      loadPort: newVesselData.openport,
-      dischargePort: newVesselData.nextport || "",
-      laycanStart: new Date(),
-      laycanEnd: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      vesselCategory: getVesselCategoryBySize(newVesselData.dwt || 32),
-      score: Math.random() * 0.3 + 0.7,
-      confidenceScore: 1,
-      rateUnit: "k/day",
-      cargoType: newVesselData.lastcargo || "Grain",
-      status: newVesselData.ballast === "yes" ? "ballast" : newVesselData.laden === "yes" ? "laden" : "available",
-      contractType: "voyage",
-      tradeLane: `${newVesselData.openport} - ${newVesselData.nextport || "TBN"}`,
-      marketSegment: "Major Bulks",
-      category: "New Inquiries",
-      priority: "medium",
-      lastUpdated: new Date(),
-      charterer: "",
-      bdiComparison: 0,
-      freightTotal: (newVesselData.freightrate || 15) * (newVesselData.dwt || 32) * 1000,
-      demurrage: (newVesselData.freightrate || 15) * 0.8,
-      loadRate: 10000,
-      dischargeRate: 12000,
-      laydays: 5,
-      duration: 30,
-      cargoQuantity: (newVesselData.dwt || 32) * 1000,
-    } as Offer
-
-    addOffer(vesselToAdd)
-    setIsAddVesselDialogOpen(false)
-
-    // Reset form
-    setNewVesselData({
-      vesselname: "",
-      type: "Handysize",
-      dwt: 32,
-      built: new Date().getFullYear() - 10,
-      flag: "Panama",
-      openport: "",
-      opendates: "",
-      nextport: "",
-      lastcargo: "",
-      ballast: "no",
-      laden: "no",
-      freightrate: 15,
-      commission: 2.5,
-      imo: "",
-      brokername: "",
-      company: "",
-      phonenumber: "",
-      email: "",
-    })
-
     toast({
-      title: "Vessel added",
-      description: `${vesselToAdd.vesselName} has been added to your inventory.`,
+      title: "Not implemented",
+      description: "This feature is not implemented yet.",
+      variant: "destructive",
     })
   }
 
   const handleEditVessel = () => {
-    if (!currentVessel) return
-
-    if (!currentVessel.vesselName || !currentVessel.loadPort || !currentVessel.dischargePort) {
-      toast({
-        title: "Missing information",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Get the updateOffer function from the store
-    const { updateOffer } = useOfferStore.getState()
-
-    // Update the vessel
-    updateOffer(currentVessel.id, currentVessel)
-
-    setIsEditVesselDialogOpen(false)
-    setCurrentVessel(null)
-
     toast({
-      title: "Vessel updated",
-      description: `${currentVessel.vesselName} has been updated.`,
+      title: "Not implemented",
+      description: "This feature is not implemented yet.",
+      variant: "destructive",
     })
   }
 
   const handleDeleteVessel = (id: string) => {
-    // Find the vessel to delete
-    const vesselToDelete = offers.find((o) => o.id === id)
-    if (!vesselToDelete) return
-
-    setCurrentVessel(vesselToDelete)
-    setIsDeleteAlertOpen(true)
+    toast({
+      title: "Not implemented",
+      description: "This feature is not implemented yet.",
+      variant: "destructive",
+    })
   }
 
   const confirmDeleteVessel = () => {
-    if (!currentVessel) return
-
-    // Get the removeOffer function from the store
-    const { removeOffer } = useOfferStore.getState()
-
-    // Delete the vessel
-    removeOffer(currentVessel.id)
-
-    setIsDeleteAlertOpen(false)
-    setCurrentVessel(null)
-
     toast({
-      title: "Vessel deleted",
-      description: `${currentVessel.vesselName || "Vessel"} has been removed from your inventory.`,
+      title: "Not implemented",
+      description: "This feature is not implemented yet.",
+      variant: "destructive",
     })
   }
 
@@ -582,17 +358,6 @@ export function EnhancedDashboard() {
   const [selectedOffers, setSelectedOffers] = useState<Set<string>>(new Set())
   const [emailMatchView, setEmailMatchView] = useState<"input" | "results">("input")
 
-  const [isExpanded, setIsExpanded] = useState(true)
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
-  const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false)
-  const [helpDialogOpen, setHelpDialogOpen] = useState(false)
-  const [exportDialogOpen, setExportDialogOpen] = useState(false)
-  const [regionFilter, setRegionFilter] = useState<string | null>(null)
-  const [tradeLaneFilter, setTradeLaneFilter] = useState<string | null>(null)
-  const [marketSegmentFilter, setMarketSegmentFilter] = useState<string | null>(null)
-  const [laycanPeriodFilter, setLaycanPeriodFilter] = useState<string | null>(null)
-  const [isFullscreen, setIsFullscreen] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(!isMobile)
   const [notifications, setNotifications] = useState<{ id: string; title: string; message: string; read: boolean }[]>([
     {
       id: "1",
@@ -694,8 +459,6 @@ export function EnhancedDashboard() {
       },
     ],
   })
-
-  const { theme } = useTheme()
 
   // Sample client email for demo
   const sampleEmail = `From: client@example.com
@@ -903,59 +666,11 @@ John`
   }
 
   const handleProcessEmail = async () => {
-    if (!emailContent.trim()) {
-      toast({
-        title: "No content to process",
-        description: "Please enter client email content or use the sample.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsProcessing(true)
-    setMatchedOffers([])
-    setSelectedOffers(new Set())
-
-    try {
-      // Simulate AI processing with visual feedback
-      await simulateProcessing()
-
-      // Extract requirements from email
-      const extractedRequirements = extractRequirements(emailContent)
-      setRequirements(extractedRequirements)
-
-      // Match offers against requirements
-      const matches = matchOffers(extractedRequirements, offers)
-
-      // Filter to show only reasonable matches (>30%)
-      const goodMatches = matches.filter((match) => match.matchScore > 30)
-      setMatchedOffers(goodMatches)
-
-      if (goodMatches.length === 0) {
-        toast({
-          title: "No matching offers found",
-          description: "Try adjusting the client requirements or adding more offers.",
-          variant: "destructive",
-        })
-      } else {
-        toast({
-          title: "Matching complete",
-          description: `Found ${goodMatches.length} matching offers for this client.`,
-        })
-        setEmailMatchView("results")
-      }
-    } catch (error) {
-      console.error("Error processing email:", error)
-      toast({
-        title: "Error processing email",
-        description: "An error occurred while analyzing the client email.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsProcessing(false)
-      setProcessingProgress(0)
-      setProcessingStatus("")
-    }
+    toast({
+      title: "Not implemented",
+      description: "This feature is not implemented yet.",
+      variant: "destructive",
+    })
   }
 
   const getMatchScoreColor = (score: number) => {
@@ -1083,7 +798,7 @@ John`
   // Initialize with sample data
   useEffect(() => {
     const loadInitialData = async () => {
-      setIsInitialLoading(true)
+      setUiState((prev) => ({ ...prev, isInitialLoading: true }))
       // Simulate loading time
       await new Promise((resolve) => setTimeout(resolve, 1500))
 
@@ -1135,7 +850,7 @@ John`
         }
       }
 
-      setIsInitialLoading(false)
+      setUiState((prev) => ({ ...prev, isInitialLoading: false }))
     }
 
     loadInitialData()
@@ -1253,7 +968,7 @@ John`
         totalFactors += 20
         if (offer.freightRate >= request.rateMin && request.freightRate <= request.rateMax) {
           matchScore += 20
-        } else if (offer.freightRate >= request.rateMin * 0.9 && offer.freightRate <= request.rateMax * 1.1) {
+        } else if (offer.freightRate >= request.rateMin * 0.9 && request.freightRate <= request.rateMax * 1.1) {
           // Close match
           matchScore += 10
         }
@@ -1380,21 +1095,14 @@ John`
   }, [displayedOffers])
 
   // Toggle vessel category expansion
-  const toggleVesselCategoryExpansion = (category: string) => {
-    // Add haptic feedback
-    if (navigator.vibrate) {
-      navigator.vibrate(5)
-    }
-
-    setExpandedVesselCategories((prev) => ({
-      ...prev,
-      [category]: !prev[category],
-    }))
+  const toggleVesselCategory = (category: string) => {
+    if (navigator.vibrate) navigator.vibrate(5)
+    setExpandedVesselCategories((prev) => ({ ...prev, [category]: !prev[category] }))
   }
 
   // Handle adding a sample offer
   const handleAddSampleOffer = () => {
-    setIsLoading(true)
+    setUiState((prev) => ({ ...prev, isLoading: true }))
 
     try {
       setTimeout(() => {
@@ -1434,7 +1142,7 @@ John`
           description: "A new vessel has been added to your inventory.",
         })
 
-        setIsLoading(false)
+        setUiState((prev) => ({ ...prev, isLoading: false }))
       }, 800)
     } catch (error) {
       console.error("Error adding sample offer:", error)
@@ -1443,7 +1151,7 @@ John`
         description: "Failed to add sample vessel. Please try again.",
         variant: "destructive",
       })
-      setIsLoading(false)
+      setUiState((prev) => ({ ...prev, isLoading: false }))
     }
   }
 
@@ -1509,7 +1217,70 @@ Rate: $${offer.freightRate}${offer.rateUnit}
 
   // Toggle sort order
   const toggleSortOrder = () => {
-    setSortOrder(sortOrder === "desc" ? "asc" : "desc")
+    setUiState((prev) => ({ ...prev, sortOrder: sortOrder === "desc" ? "asc" : "desc" }))
+  }
+
+  const VesselCategoryCard = ({ category, vessels }: { category: string; vessels: Offer[] }) => {
+    if (vessels.length === 0) return null
+
+    const isExpanded = expandedVesselCategories[category]
+
+    return (
+      <Card
+        className={cn("w-full overflow-hidden border border-slate-200 dark:border-slate-800", isMobile && "rounded-xl")}
+      >
+        <div
+          className={cn(
+            "px-4 py-3 flex items-center justify-between cursor-pointer",
+            "bg-slate-50 dark:bg-slate-800/60 text-slate-800 dark:text-slate-200",
+            "hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors border-b border-slate-200 dark:border-slate-700",
+          )}
+          onClick={() => toggleVesselCategory(category)}
+        >
+          <div className="flex items-center">
+            <Ship className="h-5 w-5 mr-2 text-slate-500" />
+            <h3 className="text-base font-medium">
+              {category}{" "}
+              <span className="text-sm font-normal text-slate-500 dark:text-slate-400">
+                ({vessels.length} {vessels.length === 1 ? "vessel" : "vessels"})
+              </span>
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600"
+            >
+              {vessels.length}
+            </Badge>
+            <ChevronDown
+              className={cn(
+                "h-5 w-5 text-slate-600 dark:text-slate-400 transition-transform duration-200",
+                isExpanded ? "transform rotate-180" : "",
+              )}
+            />
+          </div>
+        </div>
+
+        {isExpanded && (
+          <div className="bg-white dark:bg-gray-950">
+            <VesselTableNew
+              vessels={vessels}
+              onView={selectOffer}
+              onEdit={(vessel) => handleDeleteVessel(vessel.id)}
+              onDelete={handleDeleteVessel}
+            />
+          </div>
+        )}
+
+        <div className="p-3 bg-slate-50 dark:bg-slate-900 text-center text-sm text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 flex items-center justify-center">
+          <Button variant="ghost" size="sm" className="text-xs" onClick={() => toggleVesselCategory(category)}>
+            <Eye className="h-3.5 w-3.5 mr-1.5" />
+            {isExpanded ? "Hide" : "Show"} {vessels.length} {vessels.length === 1 ? "vessel" : "vessels"}
+          </Button>
+        </div>
+      </Card>
+    )
   }
 
   // Render vessel types view
@@ -1541,87 +1312,7 @@ Rate: $${offer.freightRate}${offer.rateUnit}
       <div className="space-y-6">
         {VESSEL_CATEGORIES.map((category) => {
           const vessels = offersByVesselCategory[category] || []
-          if (vessels.length === 0) return null
-
-          return (
-            <Card
-              key={category}
-              className={cn(
-                "w-full overflow-hidden border border-slate-200 dark:border-slate-800",
-                isMobile && "rounded-xl",
-              )}
-            >
-              <div
-                className={cn(
-                  "px-4 py-3 flex items-center justify-between cursor-pointer",
-                  "bg-slate-50 dark:bg-slate-800/60 text-slate-800 dark:text-slate-200",
-                  "hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors border-b border-slate-200 dark:border-slate-700",
-                )}
-                onClick={() => toggleVesselCategoryExpansion(category)}
-              >
-                <div className="flex items-center">
-                  <Ship className="h-5 w-5 mr-2 text-slate-500" />
-                  <h3 className="text-base font-medium">
-                    {category}{" "}
-                    <span className="text-sm font-normal text-slate-500 dark:text-slate-400">
-                      ({vessels.length} {vessels.length === 1 ? "vessel" : "vessels"})
-                    </span>
-                  </h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="outline"
-                    className="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600"
-                  >
-                    {vessels.length}
-                  </Badge>
-                  <ChevronDown
-                    className={cn(
-                      "h-5 w-5 text-slate-600 dark:text-slate-400 transition-transform duration-200",
-                      expandedVesselCategories[category] ? "transform rotate-180" : "",
-                    )}
-                  />
-                </div>
-              </div>
-
-              <AnimatePresence>
-                {expandedVesselCategories[category] && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3, ease: "easeInOut" }}
-                    className="overflow-hidden"
-                  >
-                    <div className="bg-white dark:bg-gray-950">
-                      <VesselTableNew
-                        vessels={vessels}
-                        onView={selectOffer}
-                        onEdit={(vessel) => {
-                          setCurrentVessel({ ...vessel })
-                          setIsEditVesselDialogOpen(true)
-                        }}
-                        onDelete={handleDeleteVessel}
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="p-3 bg-slate-50 dark:bg-slate-900 text-center text-sm text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 flex items-center justify-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs"
-                  onClick={() => toggleVesselCategoryExpansion(category)}
-                >
-                  <Eye className="h-3.5 w-3.5 mr-1.5" />
-                  {expandedVesselCategories[category] ? "Hide" : "Show"} {vessels.length}{" "}
-                  {vessels.length === 1 ? "vessel" : "vessels"}
-                </Button>
-              </div>
-            </Card>
-          )
+          return <VesselCategoryCard key={category} category={category} vessels={vessels} />
         })}
       </div>
     )
@@ -1673,7 +1364,7 @@ Rate: $${offer.freightRate}${offer.rateUnit}
         <CardFooter className="bg-gray-50 dark:bg-gray-900 border-t pt-3 pb-3">
           <div className="w-full flex justify-center">
             <Button
-              onClick={() => setClientEmailMatcherOpen(true)}
+              onClick={() => handleProcessEmail()}
               className={isMobile ? "w-full bg-blue-500 hover:bg-blue-600 text-white" : ""}
             >
               <Mail className="h-4 w-4 mr-2" />
@@ -1690,7 +1381,12 @@ Rate: $${offer.freightRate}${offer.rateUnit}
     if (!isMobile) return null
 
     return (
-      <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="mb-4">
+      <Tabs
+        defaultValue="all"
+        value={activeTab}
+        onValueChange={(value) => setUiState((prev) => ({ ...prev, activeTab: value }))}
+        className="mb-4"
+      >
         <TabsList className="w-full grid grid-cols-4 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
           <TabsTrigger
             value="all"
@@ -1739,187 +1435,6 @@ Rate: $${offer.freightRate}${offer.rateUnit}
           <RefreshCw className="h-6 w-6 text-blue-500" style={{ transform: `rotate(${progress * 360}deg)` }} />
         )}
       </div>
-    )
-  }
-
-  // Render mobile filter sheet
-  const renderMobileFilterSheet = () => {
-    return (
-      <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
-        <SheetContent side="bottom" className="rounded-t-xl max-h-[90vh] overflow-auto">
-          <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-5" />
-          <SheetHeader>
-            <SheetTitle>Filter Vessels</SheetTitle>
-            <SheetDescription>Customize which vessels are displayed</SheetDescription>
-          </SheetHeader>
-
-          <div className="py-4 space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Vessel Type</label>
-              <Select
-                value={vesselTypeFilter || "all"}
-                onValueChange={(value) => setVesselTypeFilter(value === "all" ? null : value)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="All Vessel Types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Vessel Types</SelectItem>
-                  {VESSEL_CATEGORIES.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Cargo Type</label>
-              <Select
-                value={cargoTypeFilter || "all"}
-                onValueChange={(value) => setCargoTypeFilter(value === "all" ? null : value)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="All Cargo Types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Cargo Types</SelectItem>
-                  {CARGO_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Contract Type</label>
-              <Select
-                value={contractTypeFilter || "all"}
-                onValueChange={(value) => setContractTypeFilter(value === "all" ? null : value)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="All Contract Types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Contract Types</SelectItem>
-                  <SelectItem value="voyage">Voyage</SelectItem>
-                  <SelectItem value="time">Time Charter</SelectItem>
-                  <SelectItem value="coa">Contract of Affreightment</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Sort By</label>
-              <Select value={sortBy} onValueChange={(value) => setSortBy(value as any)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="score">Match Score</SelectItem>
-                  <SelectItem value="rate">Freight Rate</SelectItem>
-                  <SelectItem value="date">Laycan Date</SelectItem>
-                  <SelectItem value="vessel">Vessel Size</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex justify-between pt-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setVesselTypeFilter(null)
-                  setCargoTypeFilter(null)
-                  setContractTypeFilter(null)
-                  setSortBy("score")
-                  setSortOrder("desc")
-                }}
-                className="flex-1 mr-2"
-              >
-                Reset
-              </Button>
-              <Button
-                onClick={() => setFilterSheetOpen(false)}
-                className="flex-1 ml-2 bg-blue-500 hover:bg-blue-600 text-white"
-              >
-                Apply Filters
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-    )
-  }
-
-  // Render mobile search sheet
-  const renderMobileSearchSheet = () => {
-    return (
-      <Sheet open={searchSheetOpen} onOpenChange={setSearchSheetOpen}>
-        <SheetContent side="top" className="pt-safe">
-          <div className="pt-4 pb-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-500" />
-              <Input
-                type="search"
-                placeholder="Search vessels, ports, cargo..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-10"
-                autoFocus
-              />
-              {searchTerm && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8"
-                  onClick={() => setSearchTerm("")}
-                >
-                  <span className="sr-only">Clear</span>
-                  <span className="text-lg">×</span>
-                </Button>
-              )}
-            </div>
-
-            {searchTerm && (
-              <div className="mt-4">
-                <h3 className="text-sm font-medium mb-2">Search Results</h3>
-                <div className="space-y-2">
-                  {displayedOffers.length > 0 ? (
-                    displayedOffers.slice(0, 5).map((offer) => (
-                      <div
-                        key={offer.id}
-                        className="p-3 border rounded-lg flex items-center justify-between"
-                        onClick={() => {
-                          selectOffer(offer)
-                          setSearchSheetOpen(false)
-                        }}
-                      >
-                        <div>
-                          <div className="font-medium">
-                            {offer.vesselType} {offer.vesselSize}k
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {offer.loadPort} → {offer.dischargePort}
-                          </div>
-                        </div>
-                        <div className="text-sm font-medium">
-                          ${offer.freightRate}
-                          {offer.rateUnit}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-4 text-gray-500">No vessels match your search</div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
     )
   }
 
@@ -1974,7 +1489,7 @@ Rate: $${offer.freightRate}${offer.rateUnit}
 
             {/* Data Integration Section */}
             <div className="mb-4">
-              <SheetsSyncPanel onAddVessel={() => setIsAddVesselDialogOpen(true)} isAddingVessel={isLoading} />
+              <SheetsSyncPanel onAddVessel={() => handleAddVesselManually()} isAddingVessel={isLoading} />
             </div>
 
             {/* Vessel List */}
@@ -2009,514 +1524,6 @@ Rate: $${offer.freightRate}${offer.rateUnit}
           </section>
         </div>
       )}
-
-      {/* Mobile filter sheet */}
-      {renderMobileFilterSheet()}
-
-      {/* Mobile search sheet */}
-      {renderMobileSearchSheet()}
-
-      {/* Client Email Matcher Dialog */}
-      <Dialog open={clientEmailMatcherOpen && !isMobile} onOpenChange={setClientEmailMatcherOpen}>
-        <DialogContent className="max-w-4xl h-[90vh] p-0" style={{ maxHeight: "90vh", overflow: "hidden" }}>
-          <ClientEmailMatcher
-            onSelectOffer={(offer) => {
-              selectOffer(offer)
-              setClientEmailMatcherOpen(false)
-            }}
-            onClose={() => setClientEmailMatcherOpen(false)}
-            isMobile={isMobile}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Mobile Email Matcher Sheet */}
-      {isMobile && (
-        <Sheet open={clientEmailMatcherOpen} onOpenChange={setClientEmailMatcherOpen}>
-          <SheetContent
-            side="bottom"
-            className="h-[90vh] p-0 rounded-t-xl"
-            style={{ maxHeight: "90vh", overflow: "hidden" }}
-          >
-            <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto my-2" />
-            <ClientEmailMatcher
-              onSelectOffer={(offer) => {
-                selectOffer(offer)
-                setClientEmailMatcherOpen(false)
-              }}
-              onClose={() => setClientEmailMatcherOpen(false)}
-              isMobile={isMobile}
-            />
-          </SheetContent>
-        </Sheet>
-      )}
-
-      {/* Add Vessel Dialog */}
-      <Dialog open={isAddVesselDialogOpen} onOpenChange={setIsAddVesselDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Add Vessel Manually</DialogTitle>
-            <DialogDescription>Enter the details of the vessel you want to add to your inventory.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="vesselname" className="text-right text-sm font-medium">
-                Vessel Name*
-              </label>
-              <Input
-                id="vesselname"
-                value={newVesselData.vesselname || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, vesselname: e.target.value })}
-                className="col-span-2"
-                placeholder="Ocean Pioneer"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="type" className="text-right text-sm font-medium">
-                Type
-              </label>
-              <Select
-                value={newVesselData.type}
-                onValueChange={(value) => setNewVesselData({ ...newVesselData, type: value })}
-              >
-                <SelectTrigger className="col-span-2">
-                  <SelectValue placeholder="Select vessel type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {VESSEL_CATEGORIES.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="dwt" className="text-right text-sm font-medium">
-                DWT (k)
-              </label>
-              <Input
-                id="dwt"
-                type="number"
-                value={newVesselData.dwt || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, dwt: Number(e.target.value) })}
-                className="col-span-2"
-                placeholder="32"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="built" className="text-right text-sm font-medium">
-                Built
-              </label>
-              <Input
-                id="built"
-                type="number"
-                value={newVesselData.built || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, built: Number(e.target.value) })}
-                className="col-span-2"
-                placeholder="2010"
-                min="1980"
-                max={new Date().getFullYear()}
-              />
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="flag" className="text-right text-sm font-medium">
-                Flag
-              </label>
-              <Select
-                value={newVesselData.flag}
-                onValueChange={(value) => setNewVesselData({ ...newVesselData, flag: value })}
-              >
-                <SelectTrigger className="col-span-2">
-                  <SelectValue placeholder="Select flag" />
-                </SelectTrigger>
-                <SelectContent>
-                  {FLAGS.map((flag) => (
-                    <SelectItem key={flag} value={flag}>
-                      {flag}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="openport" className="text-right text-sm font-medium">
-                Open Port*
-              </label>
-              <Input
-                id="openport"
-                value={newVesselData.openport || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, openport: e.target.value })}
-                className="col-span-2"
-                placeholder="US Gulf"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="opendates" className="text-right text-sm font-medium">
-                Open Dates
-              </label>
-              <Input
-                id="opendates"
-                value={newVesselData.opendates || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, opendates: e.target.value })}
-                className="col-span-2"
-                placeholder="15-20 Jun"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="nextport" className="text-right text-sm font-medium">
-                Next Port
-              </label>
-              <Input
-                id="nextport"
-                value={newVesselData.nextport || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, nextport: e.target.value })}
-                className="col-span-2"
-                placeholder="China"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="lastcargo" className="text-right text-sm font-medium">
-                Last Cargo
-              </label>
-              <Select
-                value={newVesselData.lastcargo}
-                onValueChange={(value) => setNewVesselData({ ...newVesselData, lastcargo: value })}
-              >
-                <SelectTrigger className="col-span-2">
-                  <SelectValue placeholder="Select cargo type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CARGO_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="ballast" className="text-right text-sm font-medium">
-                Ballast
-              </label>
-              <Select
-                value={newVesselData.ballast}
-                onValueChange={(value) => setNewVesselData({ ...newVesselData, ballast: value })}
-              >
-                <SelectTrigger className="col-span-2">
-                  <SelectValue placeholder="Select ballast status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="yes">Yes</SelectItem>
-                  <SelectItem value="no">No</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="laden" className="text-right text-sm font-medium">
-                Laden
-              </label>
-              <Select
-                value={newVesselData.laden}
-                onValueChange={(value) => setNewVesselData({ ...newVesselData, laden: value })}
-              >
-                <SelectTrigger className="col-span-2">
-                  <SelectValue placeholder="Select laden status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="yes">Yes</SelectItem>
-                  <SelectItem value="no">No</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="freightrate" className="text-right text-sm font-medium">
-                Freight Rate
-              </label>
-              <div className="col-span-2 flex items-center">
-                <span className="mr-2">$</span>
-                <Input
-                  id="freightrate"
-                  type="number"
-                  value={newVesselData.freightrate || ""}
-                  onChange={(e) => setNewVesselData({ ...newVesselData, freightrate: Number(e.target.value) })}
-                  className="flex-1"
-                  placeholder="15"
-                  step="0.1"
-                />
-                <span className="ml-2">k/day</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="commission" className="text-right text-sm font-medium">
-                Commission (%)
-              </label>
-              <Input
-                id="commission"
-                type="number"
-                value={newVesselData.commission || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, commission: Number(e.target.value) })}
-                className="col-span-2"
-                placeholder="2.5"
-                step="0.1"
-                min="0"
-                max="10"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="imo" className="text-right text-sm font-medium">
-                IMO
-              </label>
-              <Input
-                id="imo"
-                value={newVesselData.imo || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, imo: e.target.value })}
-                className="col-span-2"
-                placeholder="9123456"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="brokername" className="text-right text-sm font-medium">
-                Broker Name
-              </label>
-              <Input
-                id="brokername"
-                value={newVesselData.brokername || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, brokername: e.target.value })}
-                className="col-span-2"
-                placeholder="John Smith"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="company" className="text-right text-sm font-medium">
-                Company
-              </label>
-              <Input
-                id="company"
-                value={newVesselData.company || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, company: e.target.value })}
-                className="col-span-2"
-                placeholder="Maritime Brokers Ltd"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="phonenumber" className="text-right text-sm font-medium">
-                Phone Number
-              </label>
-              <Input
-                id="phonenumber"
-                value={newVesselData.phonenumber || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, phonenumber: e.target.value })}
-                className="col-span-2"
-                placeholder="+1 555 123 4567"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 items-center gap-4">
-              <label htmlFor="email" className="text-right text-sm font-medium">
-                Email
-              </label>
-              <Input
-                id="email"
-                type="email"
-                value={newVesselData.email || ""}
-                onChange={(e) => setNewVesselData({ ...newVesselData, email: e.target.value })}
-                className="col-span-2"
-                placeholder="broker@company.com"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddVesselDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddVesselManually}>Add Vessel</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Vessel Dialog */}
-      <Dialog open={isEditVesselDialogOpen} onOpenChange={setIsEditVesselDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Edit Vessel</DialogTitle>
-            <DialogDescription>Update the details of this vessel.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="edit-vesselName" className="text-right text-sm font-medium">
-                Vessel Name*
-              </label>
-              <Input
-                id="edit-vesselName"
-                value={currentVessel?.vesselName || ""}
-                onChange={(e) => setCurrentVessel((prev) => (prev ? { ...prev, vesselName: e.target.value } : null))}
-                className="col-span-3"
-                placeholder="Ocean Pioneer"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="edit-vesselType" className="text-right text-sm font-medium">
-                Vessel Type
-              </label>
-              <Select
-                value={currentVessel?.vesselType}
-                onValueChange={(value) => setCurrentVessel((prev) => (prev ? { ...prev, vesselType: value } : null))}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select vessel type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {VESSEL_CATEGORIES.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="edit-vesselSize" className="text-right text-sm font-medium">
-                Size (k DWT)
-              </label>
-              <Input
-                id="edit-vesselSize"
-                type="number"
-                value={currentVessel?.vesselSize || ""}
-                onChange={(e) =>
-                  setCurrentVessel((prev) => (prev ? { ...prev, vesselSize: Number(e.target.value) } : null))
-                }
-                className="col-span-3"
-                placeholder="32"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="edit-loadPort" className="text-right text-sm font-medium">
-                Load Port*
-              </label>
-              <Input
-                id="edit-loadPort"
-                value={currentVessel?.loadPort || ""}
-                onChange={(e) => setCurrentVessel((prev) => (prev ? { ...prev, loadPort: e.target.value } : null))}
-                className="col-span-3"
-                placeholder="US Gulf"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="edit-dischargePort" className="text-right text-sm font-medium">
-                Discharge Port*
-              </label>
-              <Input
-                id="edit-dischargePort"
-                value={currentVessel?.dischargePort || ""}
-                onChange={(e) => setCurrentVessel((prev) => (prev ? { ...prev, dischargePort: e.target.value } : null))}
-                className="col-span-3"
-                placeholder="China"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="edit-freightRate" className="text-right text-sm font-medium">
-                Freight Rate
-              </label>
-              <div className="col-span-3 flex items-center">
-                <span className="mr-2">$</span>
-                <Input
-                  id="edit-freightRate"
-                  type="number"
-                  value={currentVessel?.freightRate || ""}
-                  onChange={(e) =>
-                    setCurrentVessel((prev) => (prev ? { ...prev, freightRate: Number(e.target.value) } : null))
-                  }
-                  className="flex-1"
-                  placeholder="15"
-                />
-                <span className="ml-2">k/day</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="edit-vesselFlag" className="text-right text-sm font-medium">
-                Flag
-              </label>
-              <Select
-                value={currentVessel?.vesselFlag}
-                onValueChange={(value) => setCurrentVessel((prev) => (prev ? { ...prev, vesselFlag: value } : null))}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select flag" />
-                </SelectTrigger>
-                <SelectContent>
-                  {FLAGS.map((flag) => (
-                    <SelectItem key={flag} value={flag}>
-                      {flag}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="edit-cargoType" className="text-right text-sm font-medium">
-                Cargo Type
-              </label>
-              <Select
-                value={currentVessel?.cargoType}
-                onValueChange={(value) => setCurrentVessel((prev) => (prev ? { ...prev, cargoType: value } : null))}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select cargo type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CARGO_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditVesselDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleEditVessel}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete the vessel {currentVessel?.vesselName || ""} from your inventory. This action
-              cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteVessel} className="bg-red-600 hover:bg-red-700">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

@@ -1,113 +1,76 @@
 import { create } from "zustand"
-import { persist } from "zustand/middleware"
+import { persist, createJSONStorage } from "zustand/middleware"
+import { devtools } from "zustand/middleware"
 
+// Define the store state interface
 interface FavoriteState {
-  favoriteOffers: Set<string>
-  favoriteClients: Set<string>
-  favoriteOrders: Set<string>
-
-  addFavoriteOffer: (offerId: string) => void
-  removeFavoriteOffer: (offerId: string) => void
-  isFavoriteOffer: (offerId: string) => boolean
-
-  addFavoriteClient: (clientId: string) => void
-  removeFavoriteClient: (clientId: string) => void
-  isFavoriteClient: (clientId: string) => boolean
-
-  addFavoriteOrder: (orderId: string) => void
-  removeFavoriteOrder: (orderId: string) => void
-  isFavoriteOrder: (orderId: string) => boolean
-
-  clearAllFavorites: () => void
+  favorites: string[] // Array of offer IDs
 }
 
-export const useFavoriteStore = create<FavoriteState>()(
-  persist(
-    (set, get) => ({
-      favoriteOffers: new Set(),
-      favoriteClients: new Set(),
-      favoriteOrders: new Set(),
+// Define the store actions interface
+interface FavoriteActions {
+  toggleFavorite: (offerId: string) => void
+  addFavorite: (offerId: string) => void
+  removeFavorite: (offerId: string) => void
+  clearFavorites: () => void
+  isFavorite: (offerId: string) => boolean
+}
 
-      addFavoriteOffer: (offerId: string) => {
-        set((state) => ({
-          favoriteOffers: new Set([...state.favoriteOffers, offerId]),
-        }))
-      },
+// Combine state and actions
+type FavoriteStore = FavoriteState & FavoriteActions
 
-      removeFavoriteOffer: (offerId: string) => {
-        set((state) => {
-          const newFavorites = new Set(state.favoriteOffers)
-          newFavorites.delete(offerId)
-          return { favoriteOffers: newFavorites }
-        })
-      },
+// Create the store with middleware
+export const useFavoriteStore = create<FavoriteStore>()(
+  devtools(
+    persist(
+      (set, get) => ({
+        // Initial state
+        favorites: [],
 
-      isFavoriteOffer: (offerId: string) => {
-        return get().favoriteOffers.has(offerId)
-      },
+        // Actions
+        toggleFavorite: (offerId) => {
+          const currentFavorites = get().favorites
+          const exists = currentFavorites.includes(offerId)
 
-      addFavoriteClient: (clientId: string) => {
-        set((state) => ({
-          favoriteClients: new Set([...state.favoriteClients, clientId]),
-        }))
-      },
+          if (exists) {
+            set({
+              favorites: currentFavorites.filter((id) => id !== offerId),
+            })
+          } else {
+            set({
+              favorites: [...currentFavorites, offerId],
+            })
+          }
+        },
 
-      removeFavoriteClient: (clientId: string) => {
-        set((state) => {
-          const newFavorites = new Set(state.favoriteClients)
-          newFavorites.delete(clientId)
-          return { favoriteClients: newFavorites }
-        })
-      },
+        addFavorite: (offerId) => {
+          const currentFavorites = get().favorites
+          if (!currentFavorites.includes(offerId)) {
+            set({
+              favorites: [...currentFavorites, offerId],
+            })
+          }
+        },
 
-      isFavoriteClient: (clientId: string) => {
-        return get().favoriteClients.has(clientId)
-      },
+        removeFavorite: (offerId) => {
+          set({
+            favorites: get().favorites.filter((id) => id !== offerId),
+          })
+        },
 
-      addFavoriteOrder: (orderId: string) => {
-        set((state) => ({
-          favoriteOrders: new Set([...state.favoriteOrders, orderId]),
-        }))
-      },
+        clearFavorites: () => {
+          set({ favorites: [] })
+        },
 
-      removeFavoriteOrder: (orderId: string) => {
-        set((state) => {
-          const newFavorites = new Set(state.favoriteOrders)
-          newFavorites.delete(orderId)
-          return { favoriteOrders: newFavorites }
-        })
+        isFavorite: (offerId) => {
+          return get().favorites.includes(offerId)
+        },
+      }),
+      {
+        name: "vessel-favorites",
+        storage: createJSONStorage(() => localStorage),
       },
-
-      isFavoriteOrder: (orderId: string) => {
-        return get().favoriteOrders.has(orderId)
-      },
-
-      clearAllFavorites: () => {
-        set({
-          favoriteOffers: new Set(),
-          favoriteClients: new Set(),
-          favoriteOrders: new Set(),
-        })
-      },
-    }),
-    {
-      name: "favorite-storage",
-      serialize: (state) =>
-        JSON.stringify({
-          ...state,
-          favoriteOffers: Array.from(state.favoriteOffers),
-          favoriteClients: Array.from(state.favoriteClients),
-          favoriteOrders: Array.from(state.favoriteOrders),
-        }),
-      deserialize: (str) => {
-        const parsed = JSON.parse(str)
-        return {
-          ...parsed,
-          favoriteOffers: new Set(parsed.favoriteOffers || []),
-          favoriteClients: new Set(parsed.favoriteClients || []),
-          favoriteOrders: new Set(parsed.favoriteOrders || []),
-        }
-      },
-    },
+    ),
+    { name: "favorite-store" },
   ),
 )

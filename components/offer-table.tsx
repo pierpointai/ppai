@@ -4,11 +4,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { formatDate, getVesselCategoryColor, getAgeColor } from "@/lib/offer-utils"
-import { Copy, Send, Eye, CheckCircle2, Clock, XCircle, AlertCircle, Star, StarOff, Anchor } from "lucide-react"
+import { Copy, Send, Eye, Star, StarOff, Anchor } from "lucide-react"
 import type { Offer } from "@/lib/types"
 import { useOfferStore } from "@/lib/offer-store"
 import { cn } from "@/lib/utils"
+import { useCallback } from "react"
+import { formatters } from "@/lib/utils/format"
+import { getVesselCategoryColor, getAgeColor } from "@/lib/offer-utils"
 
 interface OfferTableProps {
   offers: Offer[]
@@ -18,42 +20,15 @@ interface OfferTableProps {
 }
 
 export function OfferTable({ offers, onCopy, onSend, onView }: OfferTableProps) {
-  const { toggleCompareOffer, compareOffers, setCategoryForOffer, setPriorityForOffer } = useOfferStore()
+  const { toggleCompareOffer, compareOffers, setCategoryForOffer } = useOfferStore()
 
-  const getStatusIcon = (status?: string) => {
-    switch (status) {
-      case "available":
-        return <CheckCircle2 className="h-4 w-4 text-green-500" />
-      case "pending":
-        return <Clock className="h-4 w-4 text-amber-500" />
-      case "fixed":
-        return <CheckCircle2 className="h-4 w-4 text-blue-500" />
-      case "failed":
-        return <XCircle className="h-4 w-4 text-red-500" />
-      default:
-        return <AlertCircle className="h-4 w-4 text-gray-500" />
-    }
-  }
-
-  const getStatusColor = (status?: string) => {
-    switch (status) {
-      case "available":
-        return "bg-green-500/10 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
-      case "pending":
-        return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800"
-      case "fixed":
-        return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
-      case "failed":
-        return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
-      default:
-        return "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-200 dark:border-gray-800"
-    }
-  }
-
-  const toggleFavorite = (offer: Offer) => {
-    const isFavorite = offer.category === "Favorites"
-    setCategoryForOffer(offer.id, isFavorite ? "New Opportunities" : "Favorites")
-  }
+  const toggleFavorite = useCallback(
+    (offer: Offer) => {
+      const isFavorite = offer.category === "Favorites"
+      setCategoryForOffer(offer.id, isFavorite ? "New Opportunities" : "Favorites")
+    },
+    [setCategoryForOffer],
+  )
 
   return (
     <div className="rounded-xl border overflow-hidden shadow-sm hover:shadow-md transition-all">
@@ -68,26 +43,15 @@ export function OfferTable({ offers, onCopy, onSend, onView }: OfferTableProps) 
               <TableHead className="font-medium text-slate-700 dark:text-slate-300">Rate</TableHead>
               <TableHead className="w-[50px] font-medium text-slate-700 dark:text-slate-300">
                 <div className="flex items-center justify-center">
-                  <span className="sr-only">Compare</span>
                   <Checkbox
-                    id="select-all"
                     checked={offers.length > 0 && offers.every((offer) => compareOffers.some((o) => o.id === offer.id))}
                     onCheckedChange={(checked) => {
-                      if (checked) {
-                        offers.forEach((offer) => {
-                          if (!compareOffers.some((o) => o.id === offer.id)) {
-                            toggleCompareOffer(offer)
-                          }
-                        })
-                      } else {
-                        offers.forEach((offer) => {
-                          if (compareOffers.some((o) => o.id === offer.id)) {
-                            toggleCompareOffer(offer)
-                          }
-                        })
-                      }
+                      offers.forEach((offer) => {
+                        const isComparing = compareOffers.some((o) => o.id === offer.id)
+                        if (checked && !isComparing) toggleCompareOffer(offer)
+                        if (!checked && isComparing) toggleCompareOffer(offer)
+                      })
                     }}
-                    aria-label="Select all offers for comparison"
                   />
                 </div>
               </TableHead>
@@ -138,44 +102,35 @@ export function OfferTable({ offers, onCopy, onSend, onView }: OfferTableProps) 
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1 text-sm">
-                      <span>{offer.loadPort}</span>
-                      <span className="text-muted-foreground">→</span>
-                      <span>{offer.dischargePort}</span>
+                      <span>{formatters.route(offer.loadPort, offer.dischargePort)}</span>
                     </div>
                     <div className="text-xs text-muted-foreground">{offer.cargoType}</div>
                   </TableCell>
                   <TableCell>
-                    {formatDate(offer.laycanStart)}–{formatDate(offer.laycanEnd)}
+                    {formatters.date(offer.laycanStart)}–{formatters.date(offer.laycanEnd)}
                   </TableCell>
                   <TableCell>
                     <div className="font-medium text-sm">
-                      ${offer.freightRate}
+                      {formatters.currency(offer.freightRate)}
                       {offer.rateUnit}
                     </div>
                     <div className="text-xs text-muted-foreground">{offer.charterer}</div>
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-center">
-                      <Checkbox
-                        checked={isComparing}
-                        onCheckedChange={() => toggleCompareOffer(offer)}
-                        aria-label="Select for comparison"
-                      />
+                      <Checkbox checked={isComparing} onCheckedChange={() => toggleCompareOffer(offer)} />
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onView(offer)}>
                         <Eye className="h-4 w-4" />
-                        <span className="sr-only">View</span>
                       </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onCopy(offer.id)}>
                         <Copy className="h-4 w-4" />
-                        <span className="sr-only">Copy</span>
                       </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onSend(offer.id)}>
                         <Send className="h-4 w-4" />
-                        <span className="sr-only">Send</span>
                       </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleFavorite(offer)}>
                         {isFavorite ? (
@@ -183,7 +138,6 @@ export function OfferTable({ offers, onCopy, onSend, onView }: OfferTableProps) 
                         ) : (
                           <StarOff className="h-4 w-4" />
                         )}
-                        <span className="sr-only">{isFavorite ? "Remove from favorites" : "Add to favorites"}</span>
                       </Button>
                     </div>
                   </TableCell>

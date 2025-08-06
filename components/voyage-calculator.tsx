@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -76,8 +76,8 @@ interface DemurrageCalculation {
 interface Scenario {
   id: string
   name: string
-  vesselParticulars: VesselParticulars
-  cargoLegs: CargoLeg[]
+  vessel: VesselParticulars
+  cargo: CargoLeg[]
   portRotation: PortCall[]
   bunkerExpenses: BunkerExpense[]
   operatingExpenses: {
@@ -147,83 +147,99 @@ const calculateDistance = (port1: string, port2: string): number => {
 }
 
 export function VoyageCalculator() {
-  const [scenarios, setScenarios] = useState<Scenario[]>([
-    {
-      id: "base",
-      name: "Base Scenario",
-      vesselParticulars: {
-        vesselName: "",
-        dwt: 0,
-        draft: 0,
-        tpc: 0,
-        built: 2010,
-        vesselType: "Bulk Carrier",
-        flag: "Panama",
-        consumption: { laden: 25, ballast: 22, port: 5 },
-        speed: { laden: 14, ballast: 14 },
-      },
-      cargoLegs: [
-        {
-          id: "1",
-          account: "S011ACCT1",
-          cargoName: "Iron Ore",
-          loadingPort: "Tubarao",
-          dischargingPort: "Qingdao",
-          quantity: 150000,
-          freightRate: 28.0,
-          freightTerm: "FIO",
-          commission: 3.8,
-          brokerage: 1.3,
-        },
-      ],
-      portRotation: [
-        {
-          id: "1",
-          type: "ballast",
-          portName: "Singapore",
-          distance: 2461,
-          speed: 14,
-          seaDays: 7.3,
-          portDays: 0,
-          portCharges: 3000,
-          arrival: "2024-06-08 01:09",
-          departure: "2024-06-08 15:37",
-        },
-        {
-          id: "2",
-          type: "loading",
-          portName: "Tubarao",
-          distance: 8760,
-          speed: 14,
-          seaDays: 26.1,
-          portDays: 2.5,
-          portCharges: 45000,
-          arrival: "2024-06-08 21:21",
-          departure: "2024-06-11 23:49",
-        },
-      ],
-      bunkerExpenses: [
-        { fuelType: "VLSFO", price: 580, consumption: 1411.4, expense: 818612 },
-        { fuelType: "MGO", price: 720, consumption: 4.3, expense: 3096 },
-      ],
-      operatingExpenses: {
-        dailyHire: 17000,
-        addComm: 51187.5,
-        brokerage: 19062.5,
-        freightTax: 0,
-        otherTerms: 0,
-        portCharges: 383000,
-      },
-      demurrage: {
-        loadingLaytime: 72,
-        dischargeLaytime: 72,
-        loadingTimeUsed: 60,
-        dischargeTimeUsed: 48,
-        demurrageRate: 25000,
-        despatchRate: 12500,
-      },
+  const [scenario, setScenario] = useState<Scenario>({
+    id: "base",
+    name: "Base Scenario",
+    vessel: {
+      vesselName: "",
+      dwt: 0,
+      draft: 0,
+      tpc: 0,
+      built: 2010,
+      vesselType: "Bulk Carrier",
+      flag: "Panama",
+      consumption: { laden: 25, ballast: 22, port: 5 },
+      speed: { laden: 14, ballast: 14 },
     },
-  ])
+    cargo: [
+      {
+        id: "1",
+        account: "S011ACCT1",
+        name: "Iron Ore",
+        loadingPort: "Tubarao",
+        dischargingPort: "Qingdao",
+        quantity: 150000,
+        freightRate: 28.0,
+        freightTerm: "FIO",
+        commission: 3.8,
+        brokerage: 1.3,
+      },
+    ],
+    portRotation: [
+      {
+        id: "1",
+        type: "ballast",
+        portName: "Singapore",
+        distance: 2461,
+        speed: 14,
+        seaDays: 7.3,
+        portDays: 0,
+        portCharges: 3000,
+        arrival: "2024-06-08 01:09",
+        departure: "2024-06-08 15:37",
+      },
+      {
+        id: "2",
+        type: "loading",
+        portName: "Tubarao",
+        distance: 8760,
+        speed: 14,
+        seaDays: 26.1,
+        portDays: 2.5,
+        portCharges: 45000,
+        arrival: "2024-06-08 21:21",
+        departure: "2024-06-11 23:49",
+      },
+    ],
+    bunkerExpenses: [
+      { fuelType: "VLSFO", price: 580, consumption: 1411.4, expense: 818612 },
+      { fuelType: "MGO", price: 720, consumption: 4.3, expense: 3096 },
+    ],
+    operatingExpenses: {
+      dailyHire: 17000,
+      addComm: 51187.5,
+      brokerage: 19062.5,
+      freightTax: 0,
+      otherTerms: 0,
+      portCharges: 383000,
+    },
+    demurrage: {
+      loadingLaytime: 72,
+      dischargeLaytime: 72,
+      loadingTimeUsed: 60,
+      dischargeTimeUsed: 48,
+      demurrageRate: 25000,
+      despatchRate: 12500,
+    },
+  })
+
+  const updateScenario = (path: string, value: any) => {
+    setScenario((prev) => {
+      const keys = path.split(".")
+      const updated = { ...prev }
+      let current = updated
+
+      for (let i = 0; i < keys.length - 1; i++) {
+        current[keys[i]] = { ...current[keys[i]] }
+        current = current[keys[i]]
+      }
+
+      current[keys[keys.length - 1]] = value
+      return updated
+    })
+  }
+
+  const [scenarios, setScenarios] = useState<Scenario[]>([scenario])
 
   const [activeScenario, setActiveScenario] = useState<string>("base")
   const [showDemurrage, setShowDemurrage] = useState<boolean>(false)
@@ -232,73 +248,113 @@ export function VoyageCalculator() {
   const [filteredPorts, setFilteredPorts] = useState<string[]>([])
 
   // Get current scenario
-  const currentScenario = scenarios.find((s) => s.id === activeScenario) || scenarios[0]
+  const currentScenario = scenario //scenarios.find((s) => s.id === activeScenario) || scenarios[0]
 
   // Destructure current scenario for easier access
-  const { vesselParticulars, cargoLegs, portRotation, bunkerExpenses, operatingExpenses, demurrage } = currentScenario
+  const { vessel, cargo: cargoLegs, portRotation, bunkerExpenses, operatingExpenses, demurrage } = currentScenario
 
   // Reference for export
   const calculatorRef = useRef<HTMLDivElement>(null)
 
+  const calculations = useMemo(() => {
+    const totalQuantity = scenario.cargo.reduce((sum, leg) => sum + leg.quantity, 0)
+    const totalFreight = scenario.cargo.reduce((sum, leg) => sum + leg.quantity * leg.freightRate, 0)
+    const totalSeaDays = scenario.portRotation?.reduce((sum, port) => sum + port.seaDays, 0) || 0
+    const totalPortDays = scenario.portRotation?.reduce((sum, port) => sum + port.portDays, 0) || 0
+    const totalVoyageDays = totalSeaDays + totalPortDays
+    const totalBunkerExpense = scenario.bunkerExpenses.reduce((sum, bunker) => sum + bunker.expense, 0)
+    const totalPortCharges = scenario.portRotation.reduce((sum, port) => sum + port.portCharges, 0)
+
+    const grossRevenue = totalFreight
+    const totalExpenses =
+      scenario.operatingExpenses.dailyHire * totalVoyageDays +
+      scenario.operatingExpenses.addComm +
+      scenario.operatingExpenses.brokerage +
+      totalBunkerExpense +
+      totalPortCharges
+    const netProfit = grossRevenue - totalExpenses
+    const tceDaily = netProfit / totalVoyageDays
+
+    // Demurrage calculation
+    const loadingDemurrage =
+      demurrage.loadingTimeUsed > demurrage.loadingLaytime
+        ? ((demurrage.loadingTimeUsed - demurrage.loadingLaytime) * demurrage.demurrageRate) / 24
+        : 0
+
+    const loadingDespatch =
+      demurrage.loadingTimeUsed < demurrage.loadingLaytime
+        ? ((demurrage.loadingLaytime - demurrage.loadingTimeUsed) * demurrage.despatchRate) / 24
+        : 0
+
+    const dischargeDemurrage =
+      demurrage.dischargeTimeUsed > demurrage.dischargeLaytime
+        ? ((demurrage.dischargeTimeUsed - demurrage.dischargeLaytime) * demurrage.demurrageRate) / 24
+        : 0
+
+    const dischargeDespatch =
+      demurrage.dischargeTimeUsed < demurrage.dischargeLaytime
+        ? ((demurrage.dischargeLaytime - demurrage.dischargeTimeUsed) * demurrage.despatchRate) / 24
+        : 0
+
+    const totalDemurrage = loadingDemurrage + dischargeDemurrage
+    const totalDespatch = loadingDespatch + dischargeDespatch
+    const netDemurrage = totalDemurrage - totalDespatch
+
+    return {
+      totalQuantity,
+      totalFreight,
+      totalSeaDays,
+      totalPortDays,
+      totalVoyageDays,
+      grossRevenue,
+      totalExpenses,
+      netProfit,
+      tceDaily,
+      loadingDemurrage,
+      loadingDespatch,
+      dischargeDemurrage,
+      dischargeDespatch,
+      totalDemurrage,
+      totalDespatch,
+      netDemurrage,
+      totalBunkerExpense,
+      totalPortCharges,
+    }
+  }, [scenario])
+
   // Calculations
-  const totalQuantity = cargoLegs.reduce((sum, leg) => sum + leg.quantity, 0)
-  const totalFreight = cargoLegs.reduce((sum, leg) => sum + leg.quantity * leg.freightRate, 0)
-  const totalSeaDays = portRotation.reduce((sum, port) => sum + port.seaDays, 0)
-  const totalPortDays = portRotation.reduce((sum, port) => sum + port.portDays, 0)
-  const totalVoyageDays = totalSeaDays + totalPortDays
-  const totalBunkerExpense = bunkerExpenses.reduce((sum, bunker) => sum + bunker.expense, 0)
-  const totalPortCharges = portRotation.reduce((sum, port) => sum + port.portCharges, 0)
-
-  const grossRevenue = totalFreight
-  const totalExpenses =
-    operatingExpenses.dailyHire * totalVoyageDays +
-    operatingExpenses.addComm +
-    operatingExpenses.brokerage +
-    totalBunkerExpense +
-    totalPortCharges
-  const netProfit = grossRevenue - totalExpenses
-  const tceDaily = netProfit / totalVoyageDays
-
-  // Demurrage calculation
-  const loadingDemurrage =
-    demurrage.loadingTimeUsed > demurrage.loadingLaytime
-      ? ((demurrage.loadingTimeUsed - demurrage.loadingLaytime) * demurrage.demurrageRate) / 24
-      : 0
-
-  const loadingDespatch =
-    demurrage.loadingTimeUsed < demurrage.loadingLaytime
-      ? ((demurrage.loadingLaytime - demurrage.loadingTimeUsed) * demurrage.despatchRate) / 24
-      : 0
-
-  const dischargeDemurrage =
-    demurrage.dischargeTimeUsed > demurrage.dischargeLaytime
-      ? ((demurrage.dischargeTimeUsed - demurrage.dischargeLaytime) * demurrage.demurrageRate) / 24
-      : 0
-
-  const dischargeDespatch =
-    demurrage.dischargeTimeUsed < demurrage.dischargeLaytime
-      ? ((demurrage.dischargeLaytime - demurrage.dischargeTimeUsed) * demurrage.despatchRate) / 24
-      : 0
-
-  const totalDemurrage = loadingDemurrage + dischargeDemurrage
-  const totalDespatch = loadingDespatch + dischargeDespatch
-  const netDemurrage = totalDemurrage - totalDespatch
+  const {
+    totalQuantity,
+    totalFreight,
+    totalSeaDays,
+    totalPortDays,
+    totalVoyageDays,
+    grossRevenue,
+    totalExpenses,
+    netProfit,
+    tceDaily,
+    loadingDemurrage,
+    loadingDespatch,
+    dischargeDemurrage,
+    dischargeDespatch,
+    totalDemurrage,
+    totalDespatch,
+    netDemurrage,
+    totalBunkerExpense,
+    totalPortCharges,
+  } = calculations
 
   // Update functions
-  const updateScenario = (updates: Partial<Scenario>) => {
-    setScenarios(scenarios.map((s) => (s.id === activeScenario ? { ...s, ...updates } : s)))
-  }
+  // const updateScenario = (updates: Partial<Scenario>) => {
+  //   setScenarios(scenarios.map((s) => (s.id === activeScenario ? { ...s, ...updates } : s)))
+  // }
 
   const updateVesselParticulars = (updates: Partial<VesselParticulars>) => {
-    updateScenario({
-      vesselParticulars: { ...vesselParticulars, ...updates },
-    })
+    updateScenario("vessel", { ...vessel, ...updates })
   }
 
   const updateDemurrage = (updates: Partial<DemurrageCalculation>) => {
-    updateScenario({
-      demurrage: { ...demurrage, ...updates },
-    })
+    updateScenario("demurrage", { ...demurrage, ...updates })
   }
 
   const addCargoLeg = () => {
@@ -314,17 +370,21 @@ export function VoyageCalculator() {
       commission: 3.8,
       brokerage: 1.3,
     }
-    updateScenario({ cargoLegs: [...cargoLegs, newLeg] })
+    updateScenario("cargo", [...cargoLegs, newLeg])
   }
 
   const removeCargoLeg = (id: string) => {
-    updateScenario({ cargoLegs: cargoLegs.filter((leg) => leg.id !== id) })
+    updateScenario(
+      "cargo",
+      cargoLegs.filter((leg) => leg.id !== id),
+    )
   }
 
   const updateCargoLeg = (id: string, field: keyof CargoLeg, value: any) => {
-    updateScenario({
-      cargoLegs: cargoLegs.map((leg) => (leg.id === id ? { ...leg, [field]: value } : leg)),
-    })
+    updateScenario(
+      "cargo",
+      cargoLegs.map((leg) => (leg.id === id ? { ...leg, [field]: value } : leg)),
+    )
 
     // Auto-calculate distance if both ports are set
     if (field === "loadingPort" || field === "dischargingPort") {
@@ -433,7 +493,7 @@ export function VoyageCalculator() {
                 <Label htmlFor="vesselName">Vessel Name</Label>
                 <Input
                   id="vesselName"
-                  value={vesselParticulars.vesselName}
+                  value={vessel.vesselName}
                   onChange={(e) => updateVesselParticulars({ vesselName: e.target.value })}
                   placeholder="M/V EXAMPLE"
                 />
@@ -443,7 +503,7 @@ export function VoyageCalculator() {
                 <Input
                   id="dwt"
                   type="number"
-                  value={vesselParticulars.dwt}
+                  value={vessel.dwt}
                   onChange={(e) => updateVesselParticulars({ dwt: Number(e.target.value) })}
                   placeholder="56811"
                 />
@@ -454,7 +514,7 @@ export function VoyageCalculator() {
                   id="draft"
                   type="number"
                   step="0.1"
-                  value={vesselParticulars.draft}
+                  value={vessel.draft}
                   onChange={(e) => updateVesselParticulars({ draft: Number(e.target.value) })}
                   placeholder="12.80"
                 />
@@ -465,7 +525,7 @@ export function VoyageCalculator() {
                   id="tpc"
                   type="number"
                   step="0.1"
-                  value={vesselParticulars.tpc}
+                  value={vessel.tpc}
                   onChange={(e) => updateVesselParticulars({ tpc: Number(e.target.value) })}
                   placeholder="58.00"
                 />
@@ -475,7 +535,7 @@ export function VoyageCalculator() {
                 <Input
                   id="built"
                   type="number"
-                  value={vesselParticulars.built}
+                  value={vessel.built}
                   onChange={(e) => updateVesselParticulars({ built: Number(e.target.value) })}
                   placeholder="2010"
                 />
@@ -483,7 +543,7 @@ export function VoyageCalculator() {
               <div>
                 <Label htmlFor="vesselType">Type</Label>
                 <Select
-                  value={vesselParticulars.vesselType}
+                  value={vessel.vesselType}
                   onValueChange={(value) => updateVesselParticulars({ vesselType: value })}
                 >
                   <SelectTrigger>
@@ -510,10 +570,10 @@ export function VoyageCalculator() {
                     <Label className="w-16">Laden:</Label>
                     <Input
                       type="number"
-                      value={vesselParticulars.consumption.laden}
+                      value={vessel.consumption.laden}
                       onChange={(e) =>
                         updateVesselParticulars({
-                          consumption: { ...vesselParticulars.consumption, laden: Number(e.target.value) },
+                          consumption: { ...vessel.consumption, laden: Number(e.target.value) },
                         })
                       }
                       className="w-24"
@@ -523,10 +583,10 @@ export function VoyageCalculator() {
                     <Label className="w-16">Ballast:</Label>
                     <Input
                       type="number"
-                      value={vesselParticulars.consumption.ballast}
+                      value={vessel.consumption.ballast}
                       onChange={(e) =>
                         updateVesselParticulars({
-                          consumption: { ...vesselParticulars.consumption, ballast: Number(e.target.value) },
+                          consumption: { ...vessel.consumption, ballast: Number(e.target.value) },
                         })
                       }
                       className="w-24"
@@ -536,10 +596,10 @@ export function VoyageCalculator() {
                     <Label className="w-16">Port:</Label>
                     <Input
                       type="number"
-                      value={vesselParticulars.consumption.port}
+                      value={vessel.consumption.port}
                       onChange={(e) =>
                         updateVesselParticulars({
-                          consumption: { ...vesselParticulars.consumption, port: Number(e.target.value) },
+                          consumption: { ...vessel.consumption, port: Number(e.target.value) },
                         })
                       }
                       className="w-24"
@@ -556,10 +616,10 @@ export function VoyageCalculator() {
                     <Input
                       type="number"
                       step="0.1"
-                      value={vesselParticulars.speed.laden}
+                      value={vessel.speed.laden}
                       onChange={(e) =>
                         updateVesselParticulars({
-                          speed: { ...vesselParticulars.speed, laden: Number(e.target.value) },
+                          speed: { ...vessel.speed, laden: Number(e.target.value) },
                         })
                       }
                       className="w-24"
@@ -570,10 +630,10 @@ export function VoyageCalculator() {
                     <Input
                       type="number"
                       step="0.1"
-                      value={vesselParticulars.speed.ballast}
+                      value={vessel.speed.ballast}
                       onChange={(e) =>
                         updateVesselParticulars({
-                          speed: { ...vesselParticulars.speed, ballast: Number(e.target.value) },
+                          speed: { ...vessel.speed, ballast: Number(e.target.value) },
                         })
                       }
                       className="w-24"
@@ -1167,7 +1227,7 @@ export function VoyageCalculator() {
               <tbody>
                 {scenarios.map((scenario) => {
                   // Simplified calculations for each scenario
-                  const scenarioTotalFreight = scenario.cargoLegs.reduce(
+                  const scenarioTotalFreight = scenario.cargo.reduce(
                     (sum, leg) => sum + leg.quantity * leg.freightRate,
                     0,
                   )

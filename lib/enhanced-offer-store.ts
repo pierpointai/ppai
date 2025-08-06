@@ -1,451 +1,269 @@
 import { create } from "zustand"
-import { persist } from "zustand/middleware"
-import type { Offer } from "./types"
+import { persist, createJSONStorage } from "zustand/middleware"
+import { devtools } from "zustand/middleware"
+import { MOCK_OFFERS } from "@/lib/mock-data"
+import { enhancedRankOffers } from "@/lib/enhanced-matching"
+import type { Offer, EnhancedRankingWeights, GeographicRadius } from "@/lib/types"
+
+// Default enhanced ranking weights
+const DEFAULT_ENHANCED_WEIGHTS: EnhancedRankingWeights = {
+  vesselSize: 0.25,
+  laycan: 0.2,
+  freightRate: 0.2,
+  region: 0.1,
+  vesselAge: 0.05,
+  cargoType: 0.05,
+  chartererReputation: 0.05,
+  portEfficiency: 0.03,
+  historicalPerformance: 0.04,
+  marketTrend: 0.02,
+  geographicProximity: 0.01,
+}
 
 interface EnhancedOfferState {
-  // Core offer data
   offers: Offer[]
   filteredOffers: Offer[]
   selectedOffer: Offer | null
-
-  // Comparison functionality
   compareOffers: Offer[]
-  maxCompareOffers: number
-
-  // Search and filtering
-  searchTerm: string
-  activeFilters: {
-    vesselType?: string[]
-    cargoType?: string[]
-    status?: string[]
-    priority?: string[]
-    dateRange?: { start: Date; end: Date }
-    rateRange?: { min: number; max: number }
-    sizeRange?: { min: number; max: number }
-  }
-
-  // Sorting and ranking
-  sortBy: "score" | "rate" | "date" | "vessel" | "priority"
-  sortOrder: "asc" | "desc"
-  rankingWeights: {
-    vesselSize: number
-    laycan: number
-    freightRate: number
-    region: number
-    vesselAge: number
-    cargoType: number
-  }
-
-  // Performance tracking
+  enhancedWeights: EnhancedRankingWeights
+  geographicRadius: GeographicRadius
+  clientRequirements: any
   lastUpdated: Date
-  processingTime: number
   isLoading: boolean
-
-  // Actions
-  addOffer: (offer: Offer) => void
-  addOffers: (offers: Offer[]) => void
-  updateOffer: (id: string, updates: Partial<Offer>) => void
-  removeOffer: (id: string) => void
-  clearOffers: () => void
-
-  // Selection
-  selectOffer: (offer: Offer | null) => void
-
-  // Comparison
-  toggleCompareOffer: (offer: Offer) => void
-  clearCompareOffers: () => void
-  isOfferInComparison: (offerId: string) => boolean
-
-  // Search and filtering
-  setSearchTerm: (term: string) => void
-  setFilters: (filters: Partial<EnhancedOfferState["activeFilters"]>) => void
-  clearFilters: () => void
-  applyFilters: () => void
-
-  // Sorting
-  setSortBy: (sortBy: EnhancedOfferState["sortBy"]) => void
-  setSortOrder: (order: EnhancedOfferState["sortOrder"]) => void
-  setRankingWeights: (weights: Partial<EnhancedOfferState["rankingWeights"]>) => void
-
-  // Bulk operations
-  batchUpdateOffers: (updates: Array<{ id: string; updates: Partial<Offer> }>) => void
-  markOffersAsViewed: (offerIds: string[]) => void
-
-  // Categories and priorities
-  setCategoryForOffer: (id: string, category: string) => void
-  setPriorityForOffer: (id: string, priority: Offer["priority"]) => void
-
-  // Utility functions
-  getOffersByCategory: (category: string) => Offer[]
-  getOffersByPriority: (priority: Offer["priority"]) => Offer[]
-  getOffersByStatus: (status: Offer["status"]) => Offer[]
-  searchOffers: (query: string) => Offer[]
-
-  // Analytics
-  getOfferStats: () => {
-    total: number
-    byStatus: Record<string, number>
-    byPriority: Record<string, number>
-    byVesselType: Record<string, number>
-    averageRate: number
-    averageScore: number
-  }
+  processingTime: number
 }
 
-export const useEnhancedOfferStore = create<EnhancedOfferState>()(
-  persist(
-    (set, get) => ({
-      // Initial state
-      offers: [],
-      filteredOffers: [],
-      selectedOffer: null,
-      compareOffers: [],
-      maxCompareOffers: 4,
-      searchTerm: "",
-      activeFilters: {},
-      sortBy: "score",
-      sortOrder: "desc",
-      rankingWeights: {
-        vesselSize: 0.25,
-        laycan: 0.2,
-        freightRate: 0.2,
-        region: 0.15,
-        vesselAge: 0.1,
-        cargoType: 0.1,
-      },
-      lastUpdated: new Date(),
-      processingTime: 0,
-      isLoading: false,
+interface EnhancedOfferActions {
+  setEnhancedWeights: (weights: EnhancedRankingWeights) => void
+  setGeographicRadius: (radius: GeographicRadius) => void
+  setClientRequirements: (requirements: any) => void
+  reRankOffers: () => void
+  addOffer: (offer: Offer) => void
+  updateOffer: (id: string, updates: Partial<Offer>) => void
+  removeOffer: (id: string) => void
+  selectOffer: (offer: Offer | null) => void
+  toggleCompareOffer: (offer: Offer) => void
+  clearCompare: () => void
+}
 
-      // Actions
-      addOffer: (offer) => {
-        const startTime = performance.now()
+type EnhancedOfferStore = EnhancedOfferState & EnhancedOfferActions
 
-        set((state) => {
-          const newOffers = [...state.offers, offer]
-          const endTime = performance.now()
+export const useEnhancedOfferStore = create<EnhancedOfferStore>()(
+  devtools(
+    persist(
+      (set, get) => ({
+        // Initial state
+        offers: [...MOCK_OFFERS],
+        filteredOffers: enhancedRankOffers([...MOCK_OFFERS], DEFAULT_ENHANCED_WEIGHTS),
+        selectedOffer: null,
+        compareOffers: [],
+        enhancedWeights: { ...DEFAULT_ENHANCED_WEIGHTS },
+        geographicRadius: { enabled: false, radiusKm: 200, preferExactMatch: true },
+        clientRequirements: {},
+        lastUpdated: new Date(),
+        isLoading: false,
+        processingTime: 0,
 
-          return {
+        // Actions
+        setEnhancedWeights: (weights) => {
+          const startTime = performance.now()
+          const currentState = get()
+
+          const filteredOffers = enhancedRankOffers(
+            currentState.offers,
+            weights,
+            currentState.clientRequirements,
+            currentState.geographicRadius,
+          )
+
+          set({
+            enhancedWeights: weights,
+            filteredOffers,
+            lastUpdated: new Date(),
+            processingTime: performance.now() - startTime,
+          })
+        },
+
+        setGeographicRadius: (radius) => {
+          const startTime = performance.now()
+          const currentState = get()
+
+          const filteredOffers = enhancedRankOffers(
+            currentState.offers,
+            currentState.enhancedWeights,
+            currentState.clientRequirements,
+            radius,
+          )
+
+          set({
+            geographicRadius: radius,
+            filteredOffers,
+            lastUpdated: new Date(),
+            processingTime: performance.now() - startTime,
+          })
+        },
+
+        setClientRequirements: (requirements) => {
+          const startTime = performance.now()
+          const currentState = get()
+
+          const filteredOffers = enhancedRankOffers(
+            currentState.offers,
+            currentState.enhancedWeights,
+            requirements,
+            currentState.geographicRadius,
+          )
+
+          set({
+            clientRequirements: requirements,
+            filteredOffers,
+            lastUpdated: new Date(),
+            processingTime: performance.now() - startTime,
+          })
+        },
+
+        reRankOffers: () => {
+          const startTime = performance.now()
+          const currentState = get()
+
+          const filteredOffers = enhancedRankOffers(
+            currentState.offers,
+            currentState.enhancedWeights,
+            currentState.clientRequirements,
+            currentState.geographicRadius,
+          )
+
+          set({
+            filteredOffers,
+            lastUpdated: new Date(),
+            processingTime: performance.now() - startTime,
+          })
+        },
+
+        addOffer: (offer) => {
+          const startTime = performance.now()
+          const currentState = get()
+          const newOffers = [...currentState.offers, offer]
+
+          const filteredOffers = enhancedRankOffers(
+            newOffers,
+            currentState.enhancedWeights,
+            currentState.clientRequirements,
+            currentState.geographicRadius,
+          )
+
+          set({
             offers: newOffers,
+            filteredOffers,
             lastUpdated: new Date(),
-            processingTime: endTime - startTime,
+            processingTime: performance.now() - startTime,
+          })
+        },
+
+        updateOffer: (id, updates) => {
+          const startTime = performance.now()
+          const currentState = get()
+          const offerIndex = currentState.offers.findIndex((o) => o.id === id)
+          if (offerIndex === -1) return
+
+          const updatedOffers = [...currentState.offers]
+          updatedOffers[offerIndex] = { ...updatedOffers[offerIndex], ...updates }
+
+          const filteredOffers = enhancedRankOffers(
+            updatedOffers,
+            currentState.enhancedWeights,
+            currentState.clientRequirements,
+            currentState.geographicRadius,
+          )
+
+          let updatedSelectedOffer = currentState.selectedOffer
+          if (currentState.selectedOffer?.id === id) {
+            updatedSelectedOffer = { ...currentState.selectedOffer, ...updates }
           }
-        })
 
-        // Apply filters after adding
-        get().applyFilters()
-      },
+          const updatedCompareOffers = currentState.compareOffers.map((o) => 
+            o.id === id ? { ...o, ...updates } : o
+          )
 
-      addOffers: (newOffers) => {
-        const startTime = performance.now()
-
-        set((state) => {
-          const updatedOffers = [...state.offers, ...newOffers]
-          const endTime = performance.now()
-
-          return {
+          set({
             offers: updatedOffers,
+            filteredOffers,
+            selectedOffer: updatedSelectedOffer,
+            compareOffers: updatedCompareOffers,
             lastUpdated: new Date(),
-            processingTime: endTime - startTime,
-          }
-        })
+            processingTime: performance.now() - startTime,
+          })
+        },
 
-        get().applyFilters()
-      },
+        removeOffer: (id) => {
+          const currentState = get()
+          const newOffers = currentState.offers.filter((o) => o.id !== id)
 
-      updateOffer: (id, updates) => {
-        set((state) => {
-          const updatedOffers = state.offers.map((offer) => (offer.id === id ? { ...offer, ...updates } : offer))
+          const filteredOffers = enhancedRankOffers(
+            newOffers,
+            currentState.enhancedWeights,
+            currentState.clientRequirements,
+            currentState.geographicRadius,
+          )
 
-          return {
-            offers: updatedOffers,
-            selectedOffer:
-              state.selectedOffer?.id === id ? { ...state.selectedOffer, ...updates } : state.selectedOffer,
-            compareOffers: state.compareOffers.map((offer) => (offer.id === id ? { ...offer, ...updates } : offer)),
+          const newSelectedOffer = currentState.selectedOffer?.id === id ? null : currentState.selectedOffer
+          const newCompareOffers = currentState.compareOffers.filter((o) => o.id !== id)
+
+          set({
+            offers: newOffers,
+            filteredOffers,
+            selectedOffer: newSelectedOffer,
+            compareOffers: newCompareOffers,
             lastUpdated: new Date(),
-          }
-        })
+          })
+        },
 
-        get().applyFilters()
-      },
+        selectOffer: (offer) => {
+          set({ selectedOffer: offer })
+        },
 
-      removeOffer: (id) => {
-        set((state) => ({
-          offers: state.offers.filter((offer) => offer.id !== id),
-          selectedOffer: state.selectedOffer?.id === id ? null : state.selectedOffer,
-          compareOffers: state.compareOffers.filter((offer) => offer.id !== id),
-          lastUpdated: new Date(),
-        }))
-
-        get().applyFilters()
-      },
-
-      clearOffers: () => {
-        set({
-          offers: [],
-          filteredOffers: [],
-          selectedOffer: null,
-          compareOffers: [],
-          lastUpdated: new Date(),
-        })
-      },
-
-      selectOffer: (offer) => {
-        set({ selectedOffer: offer })
-      },
-
-      toggleCompareOffer: (offer) => {
-        set((state) => {
-          const isAlreadyComparing = state.compareOffers.some((o) => o.id === offer.id)
+        toggleCompareOffer: (offer) => {
+          const currentState = get()
+          const isAlreadyComparing = currentState.compareOffers.some((o) => o.id === offer.id)
 
           if (isAlreadyComparing) {
-            return {
-              compareOffers: state.compareOffers.filter((o) => o.id !== offer.id),
-            }
+            set({
+              compareOffers: currentState.compareOffers.filter((o) => o.id !== offer.id),
+            })
           } else {
-            if (state.compareOffers.length >= state.maxCompareOffers) {
-              // Remove the oldest offer and add the new one
-              const newCompareOffers = [...state.compareOffers.slice(1), offer]
-              return { compareOffers: newCompareOffers }
-            } else {
-              return {
-                compareOffers: [...state.compareOffers, offer],
-              }
+            const newCompareOffers = [...currentState.compareOffers]
+            if (newCompareOffers.length >= 4) {
+              newCompareOffers.pop()
             }
+            newCompareOffers.unshift(offer)
+
+            set({
+              compareOffers: newCompareOffers,
+            })
           }
-        })
-      },
+        },
 
-      clearCompareOffers: () => {
-        set({ compareOffers: [] })
-      },
-
-      isOfferInComparison: (offerId) => {
-        return get().compareOffers.some((offer) => offer.id === offerId)
-      },
-
-      setSearchTerm: (term) => {
-        set({ searchTerm: term })
-        get().applyFilters()
-      },
-
-      setFilters: (filters) => {
-        set((state) => ({
-          activeFilters: { ...state.activeFilters, ...filters },
-        }))
-        get().applyFilters()
-      },
-
-      clearFilters: () => {
-        set({ activeFilters: {}, searchTerm: "" })
-        get().applyFilters()
-      },
-
-      applyFilters: () => {
-        const state = get()
-        let filtered = [...state.offers]
-
-        // Apply search term
-        if (state.searchTerm) {
-          const term = state.searchTerm.toLowerCase()
-          filtered = filtered.filter(
-            (offer) =>
-              offer.vesselName?.toLowerCase().includes(term) ||
-              offer.vesselType.toLowerCase().includes(term) ||
-              offer.loadPort.toLowerCase().includes(term) ||
-              offer.dischargePort.toLowerCase().includes(term) ||
-              offer.cargoType?.toLowerCase().includes(term) ||
-              offer.charterer?.toLowerCase().includes(term),
-          )
-        }
-
-        // Apply filters
-        const { activeFilters } = state
-
-        if (activeFilters.vesselType?.length) {
-          filtered = filtered.filter((offer) => activeFilters.vesselType!.includes(offer.vesselType))
-        }
-
-        if (activeFilters.cargoType?.length) {
-          filtered = filtered.filter((offer) => offer.cargoType && activeFilters.cargoType!.includes(offer.cargoType))
-        }
-
-        if (activeFilters.status?.length) {
-          filtered = filtered.filter((offer) => offer.status && activeFilters.status!.includes(offer.status))
-        }
-
-        if (activeFilters.priority?.length) {
-          filtered = filtered.filter((offer) => offer.priority && activeFilters.priority!.includes(offer.priority))
-        }
-
-        if (activeFilters.dateRange) {
-          const { start, end } = activeFilters.dateRange
-          filtered = filtered.filter((offer) => offer.laycanStart >= start && offer.laycanEnd <= end)
-        }
-
-        if (activeFilters.rateRange) {
-          const { min, max } = activeFilters.rateRange
-          filtered = filtered.filter((offer) => offer.freightRate >= min && offer.freightRate <= max)
-        }
-
-        if (activeFilters.sizeRange) {
-          const { min, max } = activeFilters.sizeRange
-          filtered = filtered.filter((offer) => offer.vesselSize >= min && offer.vesselSize <= max)
-        }
-
-        // Apply sorting
-        filtered.sort((a, b) => {
-          let comparison = 0
-
-          switch (state.sortBy) {
-            case "score":
-              comparison = (b.score || 0) - (a.score || 0)
-              break
-            case "rate":
-              comparison = b.freightRate - a.freightRate
-              break
-            case "date":
-              comparison = a.laycanStart.getTime() - b.laycanStart.getTime()
-              break
-            case "vessel":
-              comparison = a.vesselSize - b.vesselSize
-              break
-            case "priority":
-              const priorityOrder = { urgent: 4, firm: 3, indication: 2, low: 1 }
-              const aPriority = priorityOrder[a.priority || "low"]
-              const bPriority = priorityOrder[b.priority || "low"]
-              comparison = bPriority - aPriority
-              break
-          }
-
-          return state.sortOrder === "desc" ? comparison : -comparison
-        })
-
-        set({ filteredOffers: filtered })
-      },
-
-      setSortBy: (sortBy) => {
-        set({ sortBy })
-        get().applyFilters()
-      },
-
-      setSortOrder: (order) => {
-        set({ sortOrder: order })
-        get().applyFilters()
-      },
-
-      setRankingWeights: (weights) => {
-        set((state) => ({
-          rankingWeights: { ...state.rankingWeights, ...weights },
-        }))
-        get().applyFilters()
-      },
-
-      batchUpdateOffers: (updates) => {
-        const updateMap = new Map(updates.map(({ id, updates }) => [id, updates]))
-
-        set((state) => ({
-          offers: state.offers.map((offer) => {
-            const offerUpdates = updateMap.get(offer.id)
-            return offerUpdates ? { ...offer, ...offerUpdates } : offer
-          }),
-          lastUpdated: new Date(),
-        }))
-
-        get().applyFilters()
-      },
-
-      markOffersAsViewed: (offerIds) => {
-        const updates = offerIds.map((id) => ({
-          id,
-          updates: { lastViewed: new Date() },
-        }))
-        get().batchUpdateOffers(updates)
-      },
-
-      setCategoryForOffer: (id, category) => {
-        get().updateOffer(id, { category })
-      },
-
-      setPriorityForOffer: (id, priority) => {
-        get().updateOffer(id, { priority })
-      },
-
-      getOffersByCategory: (category) => {
-        return get().offers.filter((offer) => offer.category === category)
-      },
-
-      getOffersByPriority: (priority) => {
-        return get().offers.filter((offer) => offer.priority === priority)
-      },
-
-      getOffersByStatus: (status) => {
-        return get().offers.filter((offer) => offer.status === status)
-      },
-
-      searchOffers: (query) => {
-        const term = query.toLowerCase()
-        return get().offers.filter(
-          (offer) =>
-            offer.vesselName?.toLowerCase().includes(term) ||
-            offer.vesselType.toLowerCase().includes(term) ||
-            offer.loadPort.toLowerCase().includes(term) ||
-            offer.dischargePort.toLowerCase().includes(term) ||
-            offer.cargoType?.toLowerCase().includes(term) ||
-            offer.charterer?.toLowerCase().includes(term),
-        )
-      },
-
-      getOfferStats: () => {
-        const { offers } = get()
-
-        const stats = {
-          total: offers.length,
-          byStatus: {} as Record<string, number>,
-          byPriority: {} as Record<string, number>,
-          byVesselType: {} as Record<string, number>,
-          averageRate: 0,
-          averageScore: 0,
-        }
-
-        if (offers.length === 0) return stats
-
-        // Calculate statistics
-        let totalRate = 0
-        let totalScore = 0
-
-        offers.forEach((offer) => {
-          // Status distribution
-          const status = offer.status || "unknown"
-          stats.byStatus[status] = (stats.byStatus[status] || 0) + 1
-
-          // Priority distribution
-          const priority = offer.priority || "unknown"
-          stats.byPriority[priority] = (stats.byPriority[priority] || 0) + 1
-
-          // Vessel type distribution
-          stats.byVesselType[offer.vesselType] = (stats.byVesselType[offer.vesselType] || 0) + 1
-
-          // Averages
-          totalRate += offer.freightRate
-          totalScore += offer.score || 0
-        })
-
-        stats.averageRate = totalRate / offers.length
-        stats.averageScore = totalScore / offers.length
-
-        return stats
-      },
-    }),
-    {
-      name: "enhanced-offer-storage",
-      partialize: (state) => ({
-        offers: state.offers,
-        rankingWeights: state.rankingWeights,
-        activeFilters: state.activeFilters,
-        sortBy: state.sortBy,
-        sortOrder: state.sortOrder,
+        clearCompare: () => {
+          set({ compareOffers: [] })
+        },
       }),
-    },
+      {
+        name: "enhanced-offer-store",
+        storage: createJSONStorage(() => localStorage),
+        partialize: (state) => ({
+          offers: state.offers,
+          enhancedWeights: state.enhancedWeights,
+          geographicRadius: state.geographicRadius,
+          clientRequirements: state.clientRequirements,
+        }),
+      },
+    ),
+    { name: "enhanced-offer-store" },
   ),
 )
+
+// Selector hooks
+export const useEnhancedFilteredOffers = () => useEnhancedOfferStore((state) => state.filteredOffers)
+export const useEnhancedWeights = () => useEnhancedOfferStore((state) => state.enhancedWeights)
+export const useGeographicRadius = () => useEnhancedOfferStore((state) => state.geographicRadius)
+export const useClientRequirements = () => useEnhancedOfferStore((state) => state.clientRequirements)

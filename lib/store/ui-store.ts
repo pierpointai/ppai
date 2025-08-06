@@ -1,156 +1,142 @@
 import { create } from "zustand"
-import { persist } from "zustand/middleware"
+import { devtools } from "zustand/middleware"
 
+// Define the store state interface
 interface UIState {
-  // Theme and appearance
-  isDarkMode: boolean
-  sidebarCollapsed: boolean
-  compactMode: boolean
-
-  // Layout preferences
-  dashboardLayout: "grid" | "list" | "kanban"
-  vesselTableView: "detailed" | "compact" | "cards"
-
-  // Filters and search
-  globalSearchTerm: string
-  activeFilters: Record<string, any>
-
-  // Modal and dialog states
-  modals: {
-    vesselDetails: boolean
-    clientMatcher: boolean
-    orderForm: boolean
-    settings: boolean
-    help: boolean
-  }
-
-  // Notification preferences
+  sidebarOpen: boolean
+  filterPanelOpen: boolean
+  searchOpen: boolean
+  currentView: "list" | "grid" | "kanban"
+  theme: "light" | "dark" | "system"
+  mobileMenuOpen: boolean
+  activeTab: string
   notifications: {
-    enabled: boolean
-    sound: boolean
-    desktop: boolean
-    email: boolean
-  }
-
-  // Actions
-  toggleDarkMode: () => void
-  toggleSidebar: () => void
-  toggleCompactMode: () => void
-  setDashboardLayout: (layout: "grid" | "list" | "kanban") => void
-  setVesselTableView: (view: "detailed" | "compact" | "cards") => void
-  setGlobalSearchTerm: (term: string) => void
-  setActiveFilters: (filters: Record<string, any>) => void
-  openModal: (modal: keyof UIState["modals"]) => void
-  closeModal: (modal: keyof UIState["modals"]) => void
-  closeAllModals: () => void
-  updateNotificationSettings: (settings: Partial<UIState["notifications"]>) => void
-  resetUISettings: () => void
+    id: string
+    title: string
+    message: string
+    read: boolean
+    timestamp: Date
+  }[]
 }
 
-export const useUIStore = create<UIState>()(
-  persist(
+// Define the store actions interface
+interface UIActions {
+  toggleSidebar: () => void
+  setSidebarOpen: (open: boolean) => void
+  toggleFilterPanel: () => void
+  setFilterPanelOpen: (open: boolean) => void
+  toggleSearch: () => void
+  setSearchOpen: (open: boolean) => void
+  setCurrentView: (view: UIState["currentView"]) => void
+  setTheme: (theme: UIState["theme"]) => void
+  toggleMobileMenu: () => void
+  setMobileMenuOpen: (open: boolean) => void
+  setActiveTab: (tab: string) => void
+  addNotification: (notification: Omit<UIState["notifications"][0], "id" | "timestamp" | "read">) => void
+  markNotificationAsRead: (id: string) => void
+  clearNotifications: () => void
+}
+
+// Combine state and actions
+type UIStore = UIState & UIActions
+
+// Create the store with middleware
+export const useUIStore = create<UIStore>()(
+  devtools(
     (set, get) => ({
       // Initial state
-      isDarkMode: false,
-      sidebarCollapsed: false,
-      compactMode: false,
-      dashboardLayout: "grid",
-      vesselTableView: "detailed",
-      globalSearchTerm: "",
-      activeFilters: {},
-      modals: {
-        vesselDetails: false,
-        clientMatcher: false,
-        orderForm: false,
-        settings: false,
-        help: false,
-      },
-      notifications: {
-        enabled: true,
-        sound: true,
-        desktop: true,
-        email: false,
-      },
+      sidebarOpen: true,
+      filterPanelOpen: false,
+      searchOpen: false,
+      currentView: "list",
+      theme: "system",
+      mobileMenuOpen: false,
+      activeTab: "all",
+      notifications: [],
 
       // Actions
-      toggleDarkMode: () => {
-        set((state) => ({ isDarkMode: !state.isDarkMode }))
-      },
-
       toggleSidebar: () => {
-        set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed }))
+        set({ sidebarOpen: !get().sidebarOpen })
       },
 
-      toggleCompactMode: () => {
-        set((state) => ({ compactMode: !state.compactMode }))
+      setSidebarOpen: (open) => {
+        set({ sidebarOpen: open })
       },
 
-      setDashboardLayout: (layout) => {
-        set({ dashboardLayout: layout })
+      toggleFilterPanel: () => {
+        set({ filterPanelOpen: !get().filterPanelOpen })
       },
 
-      setVesselTableView: (view) => {
-        set({ vesselTableView: view })
+      setFilterPanelOpen: (open) => {
+        set({ filterPanelOpen: open })
       },
 
-      setGlobalSearchTerm: (term) => {
-        set({ globalSearchTerm: term })
+      toggleSearch: () => {
+        set({ searchOpen: !get().searchOpen })
       },
 
-      setActiveFilters: (filters) => {
-        set({ activeFilters: filters })
+      setSearchOpen: (open) => {
+        set({ searchOpen: open })
       },
 
-      openModal: (modal) => {
-        set((state) => ({
-          modals: { ...state.modals, [modal]: true },
-        }))
+      setCurrentView: (view) => {
+        set({ currentView: view })
       },
 
-      closeModal: (modal) => {
-        set((state) => ({
-          modals: { ...state.modals, [modal]: false },
-        }))
+      setTheme: (theme) => {
+        set({ theme })
       },
 
-      closeAllModals: () => {
+      toggleMobileMenu: () => {
+        set({ mobileMenuOpen: !get().mobileMenuOpen })
+      },
+
+      setMobileMenuOpen: (open) => {
+        set({ mobileMenuOpen: open })
+      },
+
+      setActiveTab: (tab) => {
+        set({ activeTab: tab })
+      },
+
+      addNotification: (notification) => {
+        const currentNotifications = get().notifications
         set({
-          modals: {
-            vesselDetails: false,
-            clientMatcher: false,
-            orderForm: false,
-            settings: false,
-            help: false,
-          },
+          notifications: [
+            {
+              id: Date.now().toString(),
+              ...notification,
+              read: false,
+              timestamp: new Date(),
+            },
+            ...currentNotifications,
+          ],
         })
       },
 
-      updateNotificationSettings: (settings) => {
-        set((state) => ({
-          notifications: { ...state.notifications, ...settings },
-        }))
+      markNotificationAsRead: (id) => {
+        const currentNotifications = get().notifications
+        set({
+          notifications: currentNotifications.map((n) =>
+            n.id === id ? { ...n, read: true } : n
+          ),
+        })
       },
 
-      resetUISettings: () => {
-        set({
-          isDarkMode: false,
-          sidebarCollapsed: false,
-          compactMode: false,
-          dashboardLayout: "grid",
-          vesselTableView: "detailed",
-          globalSearchTerm: "",
-          activeFilters: {},
-          notifications: {
-            enabled: true,
-            sound: true,
-            desktop: true,
-            email: false,
-          },
-        })
+      clearNotifications: () => {
+        set({ notifications: [] })
       },
     }),
-    {
-      name: "ui-storage",
-    },
+    { name: "ui-store" },
   ),
 )
+
+// Selector hooks for better performance
+export const useSidebarOpen = () => useUIStore((state) => state.sidebarOpen)
+export const useFilterPanelOpen = () => useUIStore((state) => state.filterPanelOpen)
+export const useSearchOpen = () => useUIStore((state) => state.searchOpen)
+export const useCurrentView = () => useUIStore((state) => state.currentView)
+export const useTheme = () => useUIStore((state) => state.theme)
+export const useMobileMenuOpen = () => useUIStore((state) => state.mobileMenuOpen)
+export const useActiveTab = () => useUIStore((state) => state.activeTab)
+export const useNotifications = () => useUIStore((state) => state.notifications)

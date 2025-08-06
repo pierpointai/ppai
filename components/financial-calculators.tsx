@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,135 +33,131 @@ interface CommissionCalculation {
 }
 
 export function FinancialCalculators() {
-  const [voyageInputs, setVoyageInputs] = useState({
-    freightRate: 25000,
-    cargoQuantity: 75000,
-    distance: 8500,
-    speed: 14,
-    consumption: 25,
-    bunkerPrice: 485,
-    portCharges: 45000,
-    canalFees: 0,
-    commissionRate: 2.5,
-    otherCosts: 15000,
+  const [inputs, setInputs] = useState({
+    voyage: {
+      freightRate: 25000,
+      cargoQuantity: 75000,
+      distance: 8500,
+      speed: 14,
+      consumption: 25,
+      bunkerPrice: 485,
+      portCharges: 45000,
+      canalFees: 0,
+      commissionRate: 2.5,
+      otherCosts: 15000,
+    },
+    commission: {
+      freightAmount: 1875000,
+      commissionRate: 2.5,
+    },
+    demurrage: {
+      laytimeAllowed: 5,
+      actualTime: 7.5,
+      demurrageRate: 15000,
+      despatchRate: 7500,
+    },
+    timeCharter: {
+      dailyRate: 18500,
+      period: 365,
+      utilization: 95,
+      offHire: 15,
+    },
   })
 
-  const [commissionInputs, setCommissionInputs] = useState({
-    freightAmount: 1875000,
-    commissionRate: 2.5,
-  })
-
-  const [demurrageInputs, setDemurrageInputs] = useState({
-    laytimeAllowed: 5,
-    actualTime: 7.5,
-    demurrageRate: 15000,
-    despatchRate: 7500,
-  })
-
-  const [tcInputs, setTcInputs] = useState({
-    dailyRate: 18500,
-    period: 365,
-    utilization: 95,
-    offHire: 15,
-  })
+  const updateInputs = (category: string, updates: any) => {
+    setInputs((prev) => ({
+      ...prev,
+      [category]: { ...prev[category], ...updates },
+    }))
+  }
 
   const { toast } = useToast()
 
-  // Voyage P&L Calculator
-  const calculateVoyage = (): VoyageCalculation => {
-    const revenue = (voyageInputs.freightRate * voyageInputs.cargoQuantity) / 1000
-    const voyageTime = voyageInputs.distance / voyageInputs.speed / 24
-    const bunkerCost = voyageTime * voyageInputs.consumption * voyageInputs.bunkerPrice
-    const commission = (revenue * voyageInputs.commissionRate) / 100
-
-    const costs = {
-      bunkers: bunkerCost,
-      portCharges: voyageInputs.portCharges,
-      canal: voyageInputs.canalFees,
-      commission: commission,
-      other: voyageInputs.otherCosts,
-    }
-
-    const totalCosts = Object.values(costs).reduce((sum, cost) => sum + cost, 0)
-    const profit = revenue - totalCosts
-    const margin = (profit / revenue) * 100
-    const tcEquivalent = profit / voyageTime
+  const calculations = useMemo(() => {
+    const { voyage, commission, demurrage, timeCharter } = inputs
 
     return {
-      revenue,
-      costs,
-      profit,
-      margin,
-      tcEquivalent,
+      voyage: (() => {
+        const revenue = (voyage.freightRate * voyage.cargoQuantity) / 1000
+        const voyageTime = voyage.distance / voyage.speed / 24
+        const bunkerCost = voyageTime * voyage.consumption * voyage.bunkerPrice
+        const commissionCost = (revenue * voyage.commissionRate) / 100
+        const totalCosts = bunkerCost + voyage.portCharges + voyage.canalFees + commissionCost + voyage.otherCosts
+        const profit = revenue - totalCosts
+
+        return {
+          revenue,
+          costs: {
+            bunkers: bunkerCost,
+            ports: voyage.portCharges,
+            canal: voyage.canalFees,
+            commission: commissionCost,
+            other: voyage.otherCosts,
+          },
+          profit,
+          margin: (profit / revenue) * 100,
+          tcEquivalent: profit / voyageTime,
+        }
+      })(),
+
+      commission: (() => {
+        const commissionAmount = (commission.freightAmount * commission.commissionRate) / 100
+        return {
+          freightAmount: commission.freightAmount,
+          commissionRate: commission.commissionRate,
+          commissionAmount,
+          netAmount: commission.freightAmount - commissionAmount,
+        }
+      })(),
+
+      demurrage: (() => {
+        const timeDifference = demurrage.actualTime - demurrage.laytimeAllowed
+
+        if (timeDifference > 0) {
+          // Demurrage
+          return {
+            type: "demurrage",
+            amount: timeDifference * demurrage.demurrageRate,
+            days: timeDifference,
+            rate: demurrage.demurrageRate,
+          }
+        } else if (timeDifference < 0) {
+          // Despatch
+          return {
+            type: "despatch",
+            amount: Math.abs(timeDifference) * demurrage.despatchRate,
+            days: Math.abs(timeDifference),
+            rate: demurrage.despatchRate,
+          }
+        } else {
+          return {
+            type: "neutral",
+            amount: 0,
+            days: 0,
+            rate: 0,
+          }
+        }
+      })(),
+
+      timeCharter: (() => {
+        const grossRevenue = timeCharter.dailyRate * timeCharter.period
+        const utilizationDays = (timeCharter.period * timeCharter.utilization) / 100
+        const offHireDays = timeCharter.offHire
+        const workingDays = utilizationDays - offHireDays
+        const netRevenue = timeCharter.dailyRate * workingDays
+        const efficiency = (workingDays / timeCharter.period) * 100
+
+        return {
+          grossRevenue,
+          netRevenue,
+          workingDays,
+          offHireDays,
+          efficiency,
+          dailyAverage: netRevenue / timeCharter.period,
+        }
+      })(),
     }
-  }
-
-  // Commission Calculator
-  const calculateCommission = (): CommissionCalculation => {
-    const commissionAmount = (commissionInputs.freightAmount * commissionInputs.commissionRate) / 100
-    const netAmount = commissionInputs.freightAmount - commissionAmount
-
-    return {
-      freightAmount: commissionInputs.freightAmount,
-      commissionRate: commissionInputs.commissionRate,
-      commissionAmount,
-      netAmount,
-    }
-  }
-
-  // Demurrage/Despatch Calculator
-  const calculateDemurrage = () => {
-    const timeDifference = demurrageInputs.actualTime - demurrageInputs.laytimeAllowed
-
-    if (timeDifference > 0) {
-      // Demurrage
-      return {
-        type: "demurrage",
-        amount: timeDifference * demurrageInputs.demurrageRate,
-        days: timeDifference,
-        rate: demurrageInputs.demurrageRate,
-      }
-    } else if (timeDifference < 0) {
-      // Despatch
-      return {
-        type: "despatch",
-        amount: Math.abs(timeDifference) * demurrageInputs.despatchRate,
-        days: Math.abs(timeDifference),
-        rate: demurrageInputs.despatchRate,
-      }
-    } else {
-      return {
-        type: "neutral",
-        amount: 0,
-        days: 0,
-        rate: 0,
-      }
-    }
-  }
-
-  // Time Charter Calculator
-  const calculateTimeCharter = () => {
-    const grossRevenue = tcInputs.dailyRate * tcInputs.period
-    const utilizationDays = (tcInputs.period * tcInputs.utilization) / 100
-    const offHireDays = tcInputs.offHire
-    const workingDays = utilizationDays - offHireDays
-    const netRevenue = tcInputs.dailyRate * workingDays
-    const efficiency = (workingDays / tcInputs.period) * 100
-
-    return {
-      grossRevenue,
-      netRevenue,
-      workingDays,
-      offHireDays,
-      efficiency,
-      dailyAverage: netRevenue / tcInputs.period,
-    }
-  }
-
-  const voyageResult = calculateVoyage()
-  const commissionResult = calculateCommission()
-  const demurrageResult = calculateDemurrage()
-  const tcResult = calculateTimeCharter()
+  }, [inputs])
 
   const handleCopyResults = (results: any, type: string) => {
     const text = JSON.stringify(results, null, 2)
@@ -226,13 +222,8 @@ export function FinancialCalculators() {
                     <Input
                       id="freightRate"
                       type="number"
-                      value={voyageInputs.freightRate}
-                      onChange={(e) =>
-                        setVoyageInputs((prev) => ({
-                          ...prev,
-                          freightRate: Number(e.target.value),
-                        }))
-                      }
+                      value={inputs.voyage.freightRate}
+                      onChange={(e) => updateInputs("voyage", { freightRate: Number(e.target.value) })}
                     />
                   </div>
                   <div>
@@ -240,13 +231,8 @@ export function FinancialCalculators() {
                     <Input
                       id="cargoQuantity"
                       type="number"
-                      value={voyageInputs.cargoQuantity}
-                      onChange={(e) =>
-                        setVoyageInputs((prev) => ({
-                          ...prev,
-                          cargoQuantity: Number(e.target.value),
-                        }))
-                      }
+                      value={inputs.voyage.cargoQuantity}
+                      onChange={(e) => updateInputs("voyage", { cargoQuantity: Number(e.target.value) })}
                     />
                   </div>
                 </div>
@@ -257,13 +243,8 @@ export function FinancialCalculators() {
                     <Input
                       id="distance"
                       type="number"
-                      value={voyageInputs.distance}
-                      onChange={(e) =>
-                        setVoyageInputs((prev) => ({
-                          ...prev,
-                          distance: Number(e.target.value),
-                        }))
-                      }
+                      value={inputs.voyage.distance}
+                      onChange={(e) => updateInputs("voyage", { distance: Number(e.target.value) })}
                     />
                   </div>
                   <div>
@@ -271,13 +252,8 @@ export function FinancialCalculators() {
                     <Input
                       id="speed"
                       type="number"
-                      value={voyageInputs.speed}
-                      onChange={(e) =>
-                        setVoyageInputs((prev) => ({
-                          ...prev,
-                          speed: Number(e.target.value),
-                        }))
-                      }
+                      value={inputs.voyage.speed}
+                      onChange={(e) => updateInputs("voyage", { speed: Number(e.target.value) })}
                     />
                   </div>
                 </div>
@@ -288,13 +264,8 @@ export function FinancialCalculators() {
                     <Input
                       id="consumption"
                       type="number"
-                      value={voyageInputs.consumption}
-                      onChange={(e) =>
-                        setVoyageInputs((prev) => ({
-                          ...prev,
-                          consumption: Number(e.target.value),
-                        }))
-                      }
+                      value={inputs.voyage.consumption}
+                      onChange={(e) => updateInputs("voyage", { consumption: Number(e.target.value) })}
                     />
                   </div>
                   <div>
@@ -302,13 +273,8 @@ export function FinancialCalculators() {
                     <Input
                       id="bunkerPrice"
                       type="number"
-                      value={voyageInputs.bunkerPrice}
-                      onChange={(e) =>
-                        setVoyageInputs((prev) => ({
-                          ...prev,
-                          bunkerPrice: Number(e.target.value),
-                        }))
-                      }
+                      value={inputs.voyage.bunkerPrice}
+                      onChange={(e) => updateInputs("voyage", { bunkerPrice: Number(e.target.value) })}
                     />
                   </div>
                 </div>
@@ -319,13 +285,8 @@ export function FinancialCalculators() {
                     <Input
                       id="portCharges"
                       type="number"
-                      value={voyageInputs.portCharges}
-                      onChange={(e) =>
-                        setVoyageInputs((prev) => ({
-                          ...prev,
-                          portCharges: Number(e.target.value),
-                        }))
-                      }
+                      value={inputs.voyage.portCharges}
+                      onChange={(e) => updateInputs("voyage", { portCharges: Number(e.target.value) })}
                     />
                   </div>
                   <div>
@@ -333,13 +294,8 @@ export function FinancialCalculators() {
                     <Input
                       id="canalFees"
                       type="number"
-                      value={voyageInputs.canalFees}
-                      onChange={(e) =>
-                        setVoyageInputs((prev) => ({
-                          ...prev,
-                          canalFees: Number(e.target.value),
-                        }))
-                      }
+                      value={inputs.voyage.canalFees}
+                      onChange={(e) => updateInputs("voyage", { canalFees: Number(e.target.value) })}
                     />
                   </div>
                 </div>
@@ -351,13 +307,8 @@ export function FinancialCalculators() {
                       id="commissionRate"
                       type="number"
                       step="0.1"
-                      value={voyageInputs.commissionRate}
-                      onChange={(e) =>
-                        setVoyageInputs((prev) => ({
-                          ...prev,
-                          commissionRate: Number(e.target.value),
-                        }))
-                      }
+                      value={inputs.voyage.commissionRate}
+                      onChange={(e) => updateInputs("voyage", { commissionRate: Number(e.target.value) })}
                     />
                   </div>
                   <div>
@@ -365,13 +316,8 @@ export function FinancialCalculators() {
                     <Input
                       id="otherCosts"
                       type="number"
-                      value={voyageInputs.otherCosts}
-                      onChange={(e) =>
-                        setVoyageInputs((prev) => ({
-                          ...prev,
-                          otherCosts: Number(e.target.value),
-                        }))
-                      }
+                      value={inputs.voyage.otherCosts}
+                      onChange={(e) => updateInputs("voyage", { otherCosts: Number(e.target.value) })}
                     />
                   </div>
                 </div>
@@ -386,7 +332,7 @@ export function FinancialCalculators() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleCopyResults(voyageResult, "Voyage P&L")}
+                    onClick={() => handleCopyResults(calculations.voyage, "Voyage P&L")}
                     className="ml-auto"
                   >
                     <Copy className="h-4 w-4" />
@@ -397,7 +343,9 @@ export function FinancialCalculators() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
                     <span className="font-medium">Total Revenue</span>
-                    <span className="text-lg font-bold text-green-600">{formatCurrency(voyageResult.revenue)}</span>
+                    <span className="text-lg font-bold text-green-600">
+                      {formatCurrency(calculations.voyage.revenue)}
+                    </span>
                   </div>
 
                   <div className="space-y-2">
@@ -405,27 +353,29 @@ export function FinancialCalculators() {
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span>Bunkers</span>
-                        <span>{formatCurrency(voyageResult.costs.bunkers)}</span>
+                        <span>{formatCurrency(calculations.voyage.costs.bunkers)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Port Charges</span>
-                        <span>{formatCurrency(voyageResult.costs.portCharges)}</span>
+                        <span>{formatCurrency(calculations.voyage.costs.ports)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Canal Fees</span>
-                        <span>{formatCurrency(voyageResult.costs.canal)}</span>
+                        <span>{formatCurrency(calculations.voyage.costs.canal)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Commission</span>
-                        <span>{formatCurrency(voyageResult.costs.commission)}</span>
+                        <span>{formatCurrency(calculations.voyage.costs.commission)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Other Costs</span>
-                        <span>{formatCurrency(voyageResult.costs.other)}</span>
+                        <span>{formatCurrency(calculations.voyage.costs.other)}</span>
                       </div>
                       <div className="flex justify-between font-medium border-t pt-1">
                         <span>Total Costs</span>
-                        <span>{formatCurrency(Object.values(voyageResult.costs).reduce((a, b) => a + b, 0))}</span>
+                        <span>
+                          {formatCurrency(Object.values(calculations.voyage.costs).reduce((a, b) => a + b, 0))}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -433,25 +383,28 @@ export function FinancialCalculators() {
                   <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
                     <span className="font-medium">Net Profit</span>
                     <span
-                      className={cn("text-lg font-bold", voyageResult.profit > 0 ? "text-green-600" : "text-red-600")}
+                      className={cn(
+                        "text-lg font-bold",
+                        calculations.voyage.profit > 0 ? "text-green-600" : "text-red-600",
+                      )}
                     >
-                      {formatCurrency(voyageResult.profit)}
+                      {formatCurrency(calculations.voyage.profit)}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="text-center p-2 bg-muted rounded">
                       <div className="text-muted-foreground">Margin</div>
-                      <div className="font-bold">{formatNumber(voyageResult.margin, 1)}%</div>
+                      <div className="font-bold">{formatNumber(calculations.voyage.margin, 1)}%</div>
                     </div>
                     <div className="text-center p-2 bg-muted rounded">
                       <div className="text-muted-foreground">T/C Equivalent</div>
-                      <div className="font-bold">{formatCurrency(voyageResult.tcEquivalent)}/day</div>
+                      <div className="font-bold">{formatCurrency(calculations.voyage.tcEquivalent)}/day</div>
                     </div>
                   </div>
 
                   <div className="text-xs text-muted-foreground">
-                    Voyage time: {formatNumber(voyageInputs.distance / voyageInputs.speed / 24, 1)} days
+                    Voyage time: {formatNumber(inputs.voyage.distance / inputs.voyage.speed / 24, 1)} days
                   </div>
                 </div>
               </CardContent>
@@ -475,13 +428,8 @@ export function FinancialCalculators() {
                   <Input
                     id="freightAmount"
                     type="number"
-                    value={commissionInputs.freightAmount}
-                    onChange={(e) =>
-                      setCommissionInputs((prev) => ({
-                        ...prev,
-                        freightAmount: Number(e.target.value),
-                      }))
-                    }
+                    value={inputs.commission.freightAmount}
+                    onChange={(e) => updateInputs("commission", { freightAmount: Number(e.target.value) })}
                   />
                 </div>
 
@@ -491,13 +439,8 @@ export function FinancialCalculators() {
                     id="commissionRate"
                     type="number"
                     step="0.1"
-                    value={commissionInputs.commissionRate}
-                    onChange={(e) =>
-                      setCommissionInputs((prev) => ({
-                        ...prev,
-                        commissionRate: Number(e.target.value),
-                      }))
-                    }
+                    value={inputs.commission.commissionRate}
+                    onChange={(e) => updateInputs("commission", { commissionRate: Number(e.target.value) })}
                   />
                 </div>
 
@@ -507,28 +450,28 @@ export function FinancialCalculators() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCommissionInputs((prev) => ({ ...prev, commissionRate: 1.25 }))}
+                      onClick={() => updateInputs("commission", { commissionRate: 1.25 })}
                     >
                       1.25% (Major Trader)
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCommissionInputs((prev) => ({ ...prev, commissionRate: 2.5 }))}
+                      onClick={() => updateInputs("commission", { commissionRate: 2.5 })}
                     >
                       2.5% (Standard)
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCommissionInputs((prev) => ({ ...prev, commissionRate: 3.75 }))}
+                      onClick={() => updateInputs("commission", { commissionRate: 3.75 })}
                     >
                       3.75% (Steel Mill)
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCommissionInputs((prev) => ({ ...prev, commissionRate: 5.0 }))}
+                      onClick={() => updateInputs("commission", { commissionRate: 5.0 })}
                     >
                       5.0% (Government)
                     </Button>
@@ -545,7 +488,7 @@ export function FinancialCalculators() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleCopyResults(commissionResult, "Commission")}
+                    onClick={() => handleCopyResults(calculations.commission, "Commission")}
                     className="ml-auto"
                   >
                     <Copy className="h-4 w-4" />
@@ -556,30 +499,31 @@ export function FinancialCalculators() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
                     <span className="font-medium">Gross Freight</span>
-                    <span className="text-lg font-bold">{formatCurrency(commissionResult.freightAmount)}</span>
+                    <span className="text-lg font-bold">{formatCurrency(calculations.commission.freightAmount)}</span>
                   </div>
 
                   <div className="flex justify-between items-center p-3 bg-yellow-50 rounded-lg">
-                    <span className="font-medium">Commission ({commissionResult.commissionRate}%)</span>
+                    <span className="font-medium">Commission ({calculations.commission.commissionRate}%)</span>
                     <span className="text-lg font-bold text-yellow-600">
-                      {formatCurrency(commissionResult.commissionAmount)}
+                      {formatCurrency(calculations.commission.commissionAmount)}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
                     <span className="font-medium">Net Amount</span>
                     <span className="text-lg font-bold text-green-600">
-                      {formatCurrency(commissionResult.netAmount)}
+                      {formatCurrency(calculations.commission.netAmount)}
                     </span>
                   </div>
 
                   <div className="text-sm text-muted-foreground space-y-1">
                     <div>
                       Commission per MT:{" "}
-                      {formatCurrency(commissionResult.commissionAmount / (voyageInputs.cargoQuantity || 1))}
+                      {formatCurrency(calculations.commission.commissionAmount / (inputs.voyage.cargoQuantity || 1))}
                     </div>
                     <div>
-                      Net rate per MT: {formatCurrency(commissionResult.netAmount / (voyageInputs.cargoQuantity || 1))}
+                      Net rate per MT:{" "}
+                      {formatCurrency(calculations.commission.netAmount / (inputs.voyage.cargoQuantity || 1))}
                     </div>
                   </div>
                 </div>
@@ -605,13 +549,8 @@ export function FinancialCalculators() {
                     id="laytimeAllowed"
                     type="number"
                     step="0.1"
-                    value={demurrageInputs.laytimeAllowed}
-                    onChange={(e) =>
-                      setDemurrageInputs((prev) => ({
-                        ...prev,
-                        laytimeAllowed: Number(e.target.value),
-                      }))
-                    }
+                    value={inputs.demurrage.laytimeAllowed}
+                    onChange={(e) => updateInputs("demurrage", { laytimeAllowed: Number(e.target.value) })}
                   />
                 </div>
 
@@ -621,13 +560,8 @@ export function FinancialCalculators() {
                     id="actualTime"
                     type="number"
                     step="0.1"
-                    value={demurrageInputs.actualTime}
-                    onChange={(e) =>
-                      setDemurrageInputs((prev) => ({
-                        ...prev,
-                        actualTime: Number(e.target.value),
-                      }))
-                    }
+                    value={inputs.demurrage.actualTime}
+                    onChange={(e) => updateInputs("demurrage", { actualTime: Number(e.target.value) })}
                   />
                 </div>
 
@@ -636,13 +570,8 @@ export function FinancialCalculators() {
                   <Input
                     id="demurrageRate"
                     type="number"
-                    value={demurrageInputs.demurrageRate}
-                    onChange={(e) =>
-                      setDemurrageInputs((prev) => ({
-                        ...prev,
-                        demurrageRate: Number(e.target.value),
-                      }))
-                    }
+                    value={inputs.demurrage.demurrageRate}
+                    onChange={(e) => updateInputs("demurrage", { demurrageRate: Number(e.target.value) })}
                   />
                 </div>
 
@@ -651,13 +580,8 @@ export function FinancialCalculators() {
                   <Input
                     id="despatchRate"
                     type="number"
-                    value={demurrageInputs.despatchRate}
-                    onChange={(e) =>
-                      setDemurrageInputs((prev) => ({
-                        ...prev,
-                        despatchRate: Number(e.target.value),
-                      }))
-                    }
+                    value={inputs.demurrage.despatchRate}
+                    onChange={(e) => updateInputs("demurrage", { despatchRate: Number(e.target.value) })}
                   />
                   <div className="text-xs text-muted-foreground mt-1">Usually 50% of demurrage rate</div>
                 </div>
@@ -672,7 +596,7 @@ export function FinancialCalculators() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleCopyResults(demurrageResult, "Demurrage/Despatch")}
+                    onClick={() => handleCopyResults(calculations.demurrage, "Demurrage/Despatch")}
                     className="ml-auto"
                   >
                     <Copy className="h-4 w-4" />
@@ -684,34 +608,40 @@ export function FinancialCalculators() {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="text-center p-2 bg-muted rounded">
                       <div className="text-muted-foreground">Allowed</div>
-                      <div className="font-bold">{formatNumber(demurrageInputs.laytimeAllowed, 1)} days</div>
+                      <div className="font-bold">{formatNumber(inputs.demurrage.laytimeAllowed, 1)} days</div>
                     </div>
                     <div className="text-center p-2 bg-muted rounded">
                       <div className="text-muted-foreground">Actual</div>
-                      <div className="font-bold">{formatNumber(demurrageInputs.actualTime, 1)} days</div>
+                      <div className="font-bold">{formatNumber(inputs.demurrage.actualTime, 1)} days</div>
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
                     <span className="font-medium">Time Difference</span>
-                    <span className="text-lg font-bold">{formatNumber(Math.abs(demurrageResult.days), 1)} days</span>
+                    <span className="text-lg font-bold">
+                      {formatNumber(Math.abs(calculations.demurrage.days), 1)} days
+                    </span>
                   </div>
 
-                  {demurrageResult.type === "demurrage" && (
+                  {calculations.demurrage.type === "demurrage" && (
                     <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
                       <span className="font-medium">Demurrage Due</span>
-                      <span className="text-lg font-bold text-red-600">{formatCurrency(demurrageResult.amount)}</span>
+                      <span className="text-lg font-bold text-red-600">
+                        {formatCurrency(calculations.demurrage.amount)}
+                      </span>
                     </div>
                   )}
 
-                  {demurrageResult.type === "despatch" && (
+                  {calculations.demurrage.type === "despatch" && (
                     <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
                       <span className="font-medium">Despatch Earned</span>
-                      <span className="text-lg font-bold text-green-600">{formatCurrency(demurrageResult.amount)}</span>
+                      <span className="text-lg font-bold text-green-600">
+                        {formatCurrency(calculations.demurrage.amount)}
+                      </span>
                     </div>
                   )}
 
-                  {demurrageResult.type === "neutral" && (
+                  {calculations.demurrage.type === "neutral" && (
                     <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                       <span className="font-medium">No Demurrage/Despatch</span>
                       <span className="text-lg font-bold text-gray-600">{formatCurrency(0)}</span>
@@ -719,11 +649,11 @@ export function FinancialCalculators() {
                   )}
 
                   <div className="text-sm text-muted-foreground">
-                    {demurrageResult.type === "demurrage" &&
-                      `Vessel exceeded laytime by ${formatNumber(demurrageResult.days, 1)} days`}
-                    {demurrageResult.type === "despatch" &&
-                      `Vessel saved ${formatNumber(demurrageResult.days, 1)} days of laytime`}
-                    {demurrageResult.type === "neutral" && "Vessel used exactly the allowed laytime"}
+                    {calculations.demurrage.type === "demurrage" &&
+                      `Vessel exceeded laytime by ${formatNumber(calculations.demurrage.days, 1)} days`}
+                    {calculations.demurrage.type === "despatch" &&
+                      `Vessel saved ${formatNumber(calculations.demurrage.days, 1)} days of laytime`}
+                    {calculations.demurrage.type === "neutral" && "Vessel used exactly the allowed laytime"}
                   </div>
                 </div>
               </CardContent>
@@ -747,13 +677,8 @@ export function FinancialCalculators() {
                   <Input
                     id="dailyRate"
                     type="number"
-                    value={tcInputs.dailyRate}
-                    onChange={(e) =>
-                      setTcInputs((prev) => ({
-                        ...prev,
-                        dailyRate: Number(e.target.value),
-                      }))
-                    }
+                    value={inputs.timeCharter.dailyRate}
+                    onChange={(e) => updateInputs("timeCharter", { dailyRate: Number(e.target.value) })}
                   />
                 </div>
 
@@ -762,13 +687,8 @@ export function FinancialCalculators() {
                   <Input
                     id="period"
                     type="number"
-                    value={tcInputs.period}
-                    onChange={(e) =>
-                      setTcInputs((prev) => ({
-                        ...prev,
-                        period: Number(e.target.value),
-                      }))
-                    }
+                    value={inputs.timeCharter.period}
+                    onChange={(e) => updateInputs("timeCharter", { period: Number(e.target.value) })}
                   />
                 </div>
 
@@ -777,13 +697,8 @@ export function FinancialCalculators() {
                   <Input
                     id="utilization"
                     type="number"
-                    value={tcInputs.utilization}
-                    onChange={(e) =>
-                      setTcInputs((prev) => ({
-                        ...prev,
-                        utilization: Number(e.target.value),
-                      }))
-                    }
+                    value={inputs.timeCharter.utilization}
+                    onChange={(e) => updateInputs("timeCharter", { utilization: Number(e.target.value) })}
                   />
                 </div>
 
@@ -792,45 +707,24 @@ export function FinancialCalculators() {
                   <Input
                     id="offHire"
                     type="number"
-                    value={tcInputs.offHire}
-                    onChange={(e) =>
-                      setTcInputs((prev) => ({
-                        ...prev,
-                        offHire: Number(e.target.value),
-                      }))
-                    }
+                    value={inputs.timeCharter.offHire}
+                    onChange={(e) => updateInputs("timeCharter", { offHire: Number(e.target.value) })}
                   />
                 </div>
 
                 <div className="pt-4">
                   <h4 className="font-medium mb-2">Quick Periods</h4>
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setTcInputs((prev) => ({ ...prev, period: 30 }))}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => updateInputs("timeCharter", { period: 30 })}>
                       1 Month
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setTcInputs((prev) => ({ ...prev, period: 90 }))}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => updateInputs("timeCharter", { period: 90 })}>
                       3 Months
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setTcInputs((prev) => ({ ...prev, period: 180 }))}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => updateInputs("timeCharter", { period: 180 })}>
                       6 Months
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setTcInputs((prev) => ({ ...prev, period: 365 }))}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => updateInputs("timeCharter", { period: 365 })}>
                       1 Year
                     </Button>
                   </div>
@@ -846,7 +740,7 @@ export function FinancialCalculators() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleCopyResults(tcResult, "Time Charter")}
+                    onClick={() => handleCopyResults(calculations.timeCharter, "Time Charter")}
                     className="ml-auto"
                   >
                     <Copy className="h-4 w-4" />
@@ -857,39 +751,44 @@ export function FinancialCalculators() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
                     <span className="font-medium">Gross Revenue</span>
-                    <span className="text-lg font-bold">{formatCurrency(tcResult.grossRevenue)}</span>
+                    <span className="text-lg font-bold">{formatCurrency(calculations.timeCharter.grossRevenue)}</span>
                   </div>
 
                   <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
                     <span className="font-medium">Net Revenue</span>
-                    <span className="text-lg font-bold text-green-600">{formatCurrency(tcResult.netRevenue)}</span>
+                    <span className="text-lg font-bold text-green-600">
+                      {formatCurrency(calculations.timeCharter.netRevenue)}
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="text-center p-2 bg-muted rounded">
                       <div className="text-muted-foreground">Working Days</div>
-                      <div className="font-bold">{formatNumber(tcResult.workingDays, 0)}</div>
+                      <div className="font-bold">{formatNumber(calculations.timeCharter.workingDays, 0)}</div>
                     </div>
                     <div className="text-center p-2 bg-muted rounded">
                       <div className="text-muted-foreground">Off-hire Days</div>
-                      <div className="font-bold">{formatNumber(tcResult.offHireDays, 0)}</div>
+                      <div className="font-bold">{formatNumber(calculations.timeCharter.offHireDays, 0)}</div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="text-center p-2 bg-muted rounded">
                       <div className="text-muted-foreground">Efficiency</div>
-                      <div className="font-bold">{formatNumber(tcResult.efficiency, 1)}%</div>
+                      <div className="font-bold">{formatNumber(calculations.timeCharter.efficiency, 1)}%</div>
                     </div>
                     <div className="text-center p-2 bg-muted rounded">
                       <div className="text-muted-foreground">Daily Average</div>
-                      <div className="font-bold">{formatCurrency(tcResult.dailyAverage)}</div>
+                      <div className="font-bold">{formatCurrency(calculations.timeCharter.dailyAverage)}</div>
                     </div>
                   </div>
 
                   <div className="text-sm text-muted-foreground">
-                    <div>Charter period: {tcInputs.period} days</div>
-                    <div>Revenue lost to off-hire: {formatCurrency(tcResult.grossRevenue - tcResult.netRevenue)}</div>
+                    <div>Charter period: {inputs.timeCharter.period} days</div>
+                    <div>
+                      Revenue lost to off-hire:{" "}
+                      {formatCurrency(calculations.timeCharter.grossRevenue - calculations.timeCharter.netRevenue)}
+                    </div>
                   </div>
                 </div>
               </CardContent>

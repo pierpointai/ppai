@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
@@ -16,7 +16,6 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
-  AlertTriangle,
   ChevronDown,
   Clock,
   Briefcase,
@@ -44,7 +43,8 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { OfferDetails } from "@/components/offer-details"
-import { VesselTable } from "@/components/vessel-table"
+import { formatDate } from "@/lib/format-utils"
+import { LoadingState } from "@/components/ui/loading-state"
 
 interface ClientDetailsProps {
   client: Client
@@ -56,14 +56,28 @@ interface ClientDetailsProps {
 
 export function ClientDetails({ client, matchedOffers, onRefreshMatches, isRefreshing, onBack }: ClientDetailsProps) {
   const [activeTab, setActiveTab] = useState("inquiries")
-  const [expandedEmails, setExpandedEmails] = useState<Record<string, boolean>>({})
-  const [expandedRequests, setExpandedRequests] = useState<Record<string, boolean>>({})
   const [favoriteOffers, setFavoriteOffers] = useState<Set<string>>(new Set())
   const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null)
   const [isOfferDetailsOpen, setIsOfferDetailsOpen] = useState(false)
   const { toast } = useToast()
   const isMobile = useIsMobile()
-  const [expandedEmailContent, setExpandedEmailContent] = useState<Record<string, boolean>>({})
+
+  const [expandedStates, setExpandedStates] = useState({
+    emails: {} as Record<string, boolean>,
+    requests: {} as Record<string, boolean>,
+    emailContent: {} as Record<string, boolean>,
+  })
+
+  const toggleExpansion = (type: "emails" | "requests" | "emailContent", id: string) => {
+    setExpandedStates((prev) => ({
+      ...prev,
+      [type]: { ...prev[type], [id]: !prev[type][id] },
+    }))
+  }
+
+  const toggleEmailExpansion = (id: string) => toggleExpansion("emails", id)
+  const toggleRequestExpansion = (id: string) => toggleExpansion("requests", id)
+  const toggleEmailContent = (id: string) => toggleExpansion("emailContent", id)
 
   useEffect(() => {
     // Initialize expandedEmailContent state for all requests
@@ -72,31 +86,12 @@ export function ClientDetails({ client, matchedOffers, onRefreshMatches, isRefre
         acc[request.id] = false
         return acc
       }, {})
-      setExpandedEmailContent(initialState)
+      setExpandedStates((prev) => ({
+        ...prev,
+        emailContent: initialState,
+      }))
     }
   }, [client.requests])
-
-  const toggleEmailExpansion = (requestId: string) => {
-    setExpandedEmails((prev) => ({
-      ...prev,
-      [requestId]: !prev[requestId],
-    }))
-  }
-
-  const toggleRequestExpansion = (requestId: string) => {
-    setExpandedRequests((prev) => ({
-      ...prev,
-      [requestId]: !prev[requestId],
-    }))
-  }
-
-  // Fix the issue with expanded email content state
-  const toggleEmailContent = (requestId: string) => {
-    setExpandedEmailContent((prev) => ({
-      ...prev,
-      [requestId]: !prev[requestId],
-    }))
-  }
 
   const toggleFavorite = (offerId: string) => {
     setFavoriteOffers((prev) => {
@@ -147,12 +142,10 @@ RATE: USD ${offer.freightRate}${offer.rateUnit}
     setIsOfferDetailsOpen(true)
   }
 
-  // Check if an offer matches a specific requirement
-  const checkMatch = (offerValue: any, requestValue: any) => {
+  const calculateMatch = (offerValue: any, requestValue: any) => {
     if (!requestValue) return { matches: true, exact: true }
     if (!offerValue) return { matches: false, exact: false }
 
-    // For strings, check for exact match or inclusion
     if (typeof offerValue === "string" && typeof requestValue === "string") {
       const exact = offerValue.toLowerCase() === requestValue.toLowerCase()
       const includes =
@@ -161,47 +154,13 @@ RATE: USD ${offer.freightRate}${offer.rateUnit}
       return { matches: exact || includes, exact }
     }
 
-    // For numbers, check if within 10% range
     if (typeof offerValue === "number" && typeof requestValue === "number") {
       const exact = offerValue === requestValue
       const within10Percent = offerValue >= requestValue * 0.9 && offerValue <= requestValue * 1.1
       return { matches: within10Percent, exact }
     }
 
-    // For dates, check if within range
-    if (offerValue instanceof Date && requestValue instanceof Date) {
-      return { matches: true, exact: offerValue.getTime() === requestValue.getTime() }
-    }
-
     return { matches: false, exact: false }
-  }
-
-  // Calculate match score between offer and request
-  const calculateMatchScore = (offer: Offer, request: any) => {
-    if (!request) return { score: 0, matches: {} }
-
-    const matches: Record<string, { matches: boolean; exact: boolean }> = {
-      vesselType: checkMatch(offer.vesselType, request.vesselType),
-      vesselSize: checkMatch(offer.vesselSize, request.vesselSize),
-      loadPort: checkMatch(offer.loadPort, request.loadPort),
-      dischargePort: checkMatch(offer.dischargePort, request.dischargePort),
-      laycan: {
-        matches:
-          new Date(offer.laycanStart) <= new Date(request.laycanEnd || "2099-12-31") &&
-          new Date(offer.laycanEnd) >= new Date(request.laycanStart || "1970-01-01"),
-        exact: false,
-      },
-      rate: checkMatch(offer.freightRate, request.targetRate),
-    }
-
-    // Count matches and exact matches
-    const matchCount = Object.values(matches).filter((m) => m.matches).length
-    const exactCount = Object.values(matches).filter((m) => m.exact).length
-
-    // Calculate score (0-100)
-    const score = Math.round((matchCount / Object.keys(matches).length) * 100)
-
-    return { score, matches }
   }
 
   // Calculate days until laycan start
@@ -296,8 +255,8 @@ RATE: USD ${offer.freightRate}${offer.rateUnit}
       )}
 
       <Card className="border shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+        <div className="border-b">
+          <div className="flex">
             <div className="flex items-center gap-4">
               <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                 <User className="h-5 w-5" />
@@ -339,7 +298,7 @@ RATE: USD ${offer.freightRate}${offer.rateUnit}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </CardHeader>
+        </div>
         <Separator />
         <CardContent className="py-3">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -387,21 +346,21 @@ RATE: USD ${offer.freightRate}${offer.rateUnit}
           {client.requests && client.requests.length > 0 ? (
             client.requests.map((request) => {
               const hasMatches = matchedOffers[request.id] && matchedOffers[request.id].length > 0
-              const isExpanded = expandedRequests[request.id] || false
+              const isExpanded = expandedStates.requests[request.id] || false
 
               return (
                 <Card key={request.id} className="overflow-hidden border shadow-sm">
-                  <CardHeader className="py-3 px-4 bg-muted/30">
+                  <div className="py-3 px-4 bg-muted/30">
                     <div className="flex justify-between items-start">
                       <div>
-                        <CardTitle className="text-base flex items-center gap-2">
+                        <div className="text-base flex items-center gap-2">
                           <Mail className="h-4 w-4 text-primary" />
                           {request.emailSubject}
-                        </CardTitle>
-                        <CardDescription className="mt-1 flex items-center gap-2 text-xs">
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-xs">
                           <Clock className="h-3 w-3" />
-                          {format(new Date(request.date), "MMMM d, yyyy")}
-                        </CardDescription>
+                          {formatDate(request.date)}
+                        </div>
                       </div>
                       <Button
                         variant="ghost"
@@ -409,7 +368,7 @@ RATE: USD ${offer.freightRate}${offer.rateUnit}
                         onClick={() => toggleEmailExpansion(request.id)}
                         className="h-8 gap-1.5 text-xs"
                       >
-                        {expandedEmails[request.id] ? (
+                        {expandedStates.emails[request.id] ? (
                           <>
                             <EyeOff className="h-3.5 w-3.5" />
                             Hide Email
@@ -422,22 +381,22 @@ RATE: USD ${offer.freightRate}${offer.rateUnit}
                         )}
                       </Button>
                     </div>
-                  </CardHeader>
+                  </div>
 
-                  {expandedEmails[request.id] && (
+                  {expandedStates.emails[request.id] && (
                     <CardContent className="pb-0 pt-0 px-4">
                       <div className="bg-muted/10 p-4 rounded-md text-sm font-mono normal-font whitespace-pre-wrap border border-muted">
                         <div>
                           {/* Email content with conditional height */}
                           <div
                             className={`whitespace-pre-wrap ${
-                              expandedEmailContent[request.id] ? "" : "relative max-h-32 overflow-hidden"
+                              expandedStates.emailContent[request.id] ? "" : "relative max-h-32 overflow-hidden"
                             }`}
                           >
                             {request.emailContent}
 
                             {/* Gradient overlay when collapsed */}
-                            {!expandedEmailContent[request.id] && (
+                            {!expandedStates.emailContent[request.id] && (
                               <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-background to-transparent"></div>
                             )}
                           </div>
@@ -449,9 +408,9 @@ RATE: USD ${offer.freightRate}${offer.rateUnit}
                             className="mt-2 w-full flex items-center justify-center gap-1 border-dashed"
                             onClick={() => toggleEmailContent(request.id)}
                           >
-                            {expandedEmailContent[request.id] ? "View Less" : "View Full Email"}
+                            {expandedStates.emailContent[request.id] ? "View Less" : "View Full Email"}
                             <ChevronDown
-                              className={`h-4 w-4 transition-transform ${expandedEmailContent[request.id] ? "rotate-180" : ""}`}
+                              className={`h-4 w-4 transition-transform ${expandedStates.emailContent[request.id] ? "rotate-180" : ""}`}
                             />
                           </Button>
                         </div>
@@ -558,44 +517,81 @@ RATE: USD ${offer.freightRate}${offer.rateUnit}
                         </div>
 
                         {isRefreshing ? (
-                          <div className="text-center py-8">
-                            <RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                            <p className="text-xs text-muted-foreground mt-2">Finding matching vessels...</p>
-                          </div>
+                          <LoadingState message="Finding matching vessels..." />
                         ) : !isExpanded && hasMatches && matchedOffers[request.id].length > 0 ? (
-                          <div className="border rounded-md overflow-hidden">
-                            <VesselTable
-                              vessels={matchedOffers[request.id].slice(0, isExpanded ? undefined : 4)}
-                              onView={handleViewOfferDetails}
-                              onCopy={(id) => handleCopyOffer(matchedOffers[request.id].find((o) => o.id === id)!)}
-                              onSend={(id) =>
-                                handleSendOffer(client.email, matchedOffers[request.id].find((o) => o.id === id)!)
-                              }
-                              onToggleFavorite={(offer) => toggleFavorite(offer.id)}
-                              showRank={true}
-                              showMatchScore={true}
-                            />
-                          </div>
+                          matchedOffers[request.id].slice(0, 4).map((offer) => (
+                            <div key={offer.id} className="border rounded-md overflow-hidden mb-4">
+                              <div className="p-4">
+                                <div className="flex items-center gap-2">
+                                  <Ship className="h-4 w-4 text-gray-500" />
+                                  <span className="font-medium">{offer.vesselName || offer.vesselType}</span>
+                                  <span className="text-sm px-1.5 py-0.5 rounded-sm ml-1.5">
+                                    {(offer.vesselSize / 1000).toFixed(0)}K DWT
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <div className="flex-1 flex items-center gap-1">
+                                    <span className="font-medium">{offer.loadPort}</span>
+                                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                                    <span className="font-medium">{offer.dischargePort}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Calendar className="h-4 w-4 text-gray-500" />
+                                  <span className="truncate">
+                                    {format(new Date(offer.laycanStart), "MMM d")}
+                                    {offer.laycanEnd && ` - ${format(new Date(offer.laycanEnd), "MMM d")}`}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <DollarSign className="h-4 w-4 text-gray-500" />
+                                  <span className="font-medium">
+                                    ${offer.freightRate}
+                                    {offer.rateUnit || "/day"}
+                                  </span>
+                                </div>
+                              </div>
+                              {renderActionButtons(offer)}
+                            </div>
+                          ))
                         ) : (
-                          <div className="text-center py-6 border border-dashed rounded-md">
-                            <AlertTriangle className="h-5 w-5 text-muted-foreground/50 mx-auto mb-2" />
-                            <p className="text-sm text-muted-foreground">No matching vessels found</p>
-                          </div>
+                          <LoadingState message="No matching vessels found" />
                         )}
 
                         {isExpanded && hasMatches && matchedOffers[request.id].length > 0 && (
                           <div className="mt-4 border rounded-md overflow-hidden">
-                            <VesselTable
-                              vessels={matchedOffers[request.id]}
-                              onView={handleViewOfferDetails}
-                              onCopy={(id) => handleCopyOffer(matchedOffers[request.id].find((o) => o.id === id)!)}
-                              onSend={(id) =>
-                                handleSendOffer(client.email, matchedOffers[request.id].find((o) => o.id === id)!)
-                              }
-                              onToggleFavorite={(offer) => toggleFavorite(offer.id)}
-                              showRank={true}
-                              showMatchScore={true}
-                            />
+                            {matchedOffers[request.id].map((offer) => (
+                              <div key={offer.id} className="p-4">
+                                <div className="flex items-center gap-2">
+                                  <Ship className="h-4 w-4 text-gray-500" />
+                                  <span className="font-medium">{offer.vesselName || offer.vesselType}</span>
+                                  <span className="text-sm px-1.5 py-0.5 rounded-sm ml-1.5">
+                                    {(offer.vesselSize / 1000).toFixed(0)}K DWT
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <div className="flex-1 flex items-center gap-1">
+                                    <span className="font-medium">{offer.loadPort}</span>
+                                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                                    <span className="font-medium">{offer.dischargePort}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Calendar className="h-4 w-4 text-gray-500" />
+                                  <span className="truncate">
+                                    {format(new Date(offer.laycanStart), "MMM d")}
+                                    {offer.laycanEnd && ` - ${format(new Date(offer.laycanEnd), "MMM d")}`}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <DollarSign className="h-4 w-4 text-gray-500" />
+                                  <span className="font-medium">
+                                    ${offer.freightRate}
+                                    {offer.rateUnit || "/day"}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         )}
 

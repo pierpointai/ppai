@@ -1,29 +1,48 @@
-export type FilterValue = string | number | boolean | null | undefined
+export interface FilterValue {
+  value: any;
+  label: string;
+}
 
 export interface FilterConfig<T> {
-  [key: string]: (item: T, value: FilterValue) => boolean
+  [key: string]: {
+    type: 'select' | 'range' | 'search';
+    options?: FilterValue[];
+    field: keyof T;
+  };
 }
 
-export function createFilter<T>(items: T[], filters: Record<string, FilterValue>, config: FilterConfig<T>): T[] {
-  return items.filter((item) =>
-    Object.entries(filters).every((entry) => {
-      const key = entry[0]
-      const value = entry[1]
-      if (!value || value === "all" || value === "") return true
-      const filterFn = config[key]
-      return filterFn ? filterFn(item, value) : true
-    }),
-  )
+export const applyFilters = function<T>(
+  items: T[],
+  filters: Record<string, FilterValue>,
+  config: FilterConfig<T>
+): T[] {
+  return items.filter(item => 
+    Object.entries(filters).every(([key, filterValue]) => {
+      const filterConfig = config[key];
+      if (!filterConfig || !filterValue.value) return true;
+      
+      const itemValue = item[filterConfig.field];
+      
+      switch (filterConfig.type) {
+        case 'select':
+          return itemValue === filterValue.value;
+        case 'search':
+          return String(itemValue || '').toLowerCase().includes(String(filterValue.value).toLowerCase());
+        case 'range':
+          const [min, max] = filterValue.value;
+          const numValue = Number(itemValue);
+          return numValue >= min && numValue <= max;
+        default:
+          return true;
+      }
+    })
+  );
 }
 
-export function createSearch<T>(items: T[], searchTerm: string, searchFields: (keyof T)[]): T[] {
-  if (!searchTerm.trim()) return items
-
-  const term = searchTerm.toLowerCase()
-  return items.filter((item) =>
-    searchFields.some((field) => {
-      const value = item[field]
-      return value && String(value).toLowerCase().includes(term)
-    }),
-  )
+export const createFilterOptions = function<T>(items: T[], field: keyof T): FilterValue[] {
+  const uniqueValues = Array.from(new Set(items.map(item => item[field])));
+  return uniqueValues.map(value => ({
+    value,
+    label: String(value)
+  }));
 }
