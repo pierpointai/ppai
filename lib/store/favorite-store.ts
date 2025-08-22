@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
+import { immer } from "zustand/middleware/immer"
 import { devtools } from "zustand/middleware"
 
 // Define the store state interface
@@ -23,38 +24,34 @@ type FavoriteStore = FavoriteState & FavoriteActions
 export const useFavoriteStore = create<FavoriteStore>()(
   devtools(
     persist(
-      (set, get) => ({
+      immer((set, get) => ({
         // Initial state
         favorites: [],
 
         // Actions
         toggleFavorite: (offerId) => {
-          const currentFavorites = get().favorites
-          const exists = currentFavorites.includes(offerId)
+          set((state) => {
+            const exists = state.favorites.includes(offerId)
 
-          if (exists) {
-            set({
-              favorites: currentFavorites.filter((id) => id !== offerId),
-            })
-          } else {
-            set({
-              favorites: [...currentFavorites, offerId],
-            })
-          }
+            if (exists) {
+              state.favorites = state.favorites.filter((id) => id !== offerId)
+            } else {
+              state.favorites.push(offerId)
+            }
+          })
         },
 
         addFavorite: (offerId) => {
-          const currentFavorites = get().favorites
-          if (!currentFavorites.includes(offerId)) {
-            set({
-              favorites: [...currentFavorites, offerId],
-            })
-          }
+          set((state) => {
+            if (!state.favorites.includes(offerId)) {
+              state.favorites.push(offerId)
+            }
+          })
         },
 
         removeFavorite: (offerId) => {
-          set({
-            favorites: get().favorites.filter((id) => id !== offerId),
+          set((state) => {
+            state.favorites = state.favorites.filter((id) => id !== offerId)
           })
         },
 
@@ -65,7 +62,7 @@ export const useFavoriteStore = create<FavoriteStore>()(
         isFavorite: (offerId) => {
           return get().favorites.includes(offerId)
         },
-      }),
+      })),
       {
         name: "vessel-favorites",
         storage: createJSONStorage(() => localStorage),

@@ -3,7 +3,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DynamicDashboard } from "@/components/dynamic-dashboard"
 import { ProximityDashboard } from "@/components/proximity-dashboard"
 import { Navigation, BarChart3, Ship } from "lucide-react"
-import { SimpleDashboard } from "@/components/simple-dashboard"
 
 export default function DashboardPage() {
   return (
@@ -40,7 +39,11 @@ export default function DashboardPage() {
         </TabsContent>
 
         <TabsContent value="vessels">
-          <SimpleDashboard />
+          <div className="text-center py-12">
+            <Ship className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">Vessel Dashboard</h3>
+            <p className="text-muted-foreground">Vessel tracking and management features coming soon</p>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

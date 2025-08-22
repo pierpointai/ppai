@@ -24,7 +24,7 @@ interface OrderDetailsDialogProps {
 export function OrderDetailsDialog({ open, onOpenChange, order }: OrderDetailsDialogProps) {
   const [showVesselLinking, setShowVesselLinking] = useState(false)
   const { offers } = useOfferStore()
-  const { updateOrder, linkVessel } = useOrderStore()
+  const { updateOrder, linkVesselToOrder } = useOrderStore()
   const [nearbyVessels, setNearbyVessels] = useState([])
   const [loading, setLoading] = useState(false)
 
@@ -109,7 +109,10 @@ export function OrderDetailsDialog({ open, onOpenChange, order }: OrderDetailsDi
     console.log("Closing vessel linking dialog with linked vessels:", linkedVessels)
     setShowVesselLinking(false)
     if (linkedVessels.length > 0) {
-      updateOrder({ ...order, linkedVessels })
+      // Link each vessel individually since the store function handles one vessel at a time
+      linkedVessels.forEach((vessel) => {
+        linkVesselToOrder(order.id, vessel)
+      })
       toast({
         title: "Success",
         description: "Vessels linked successfully.",
@@ -119,25 +122,19 @@ export function OrderDetailsDialog({ open, onOpenChange, order }: OrderDetailsDi
   }
 
   const handleAddNearbyVessel = (vessel: any) => {
-    // Convert the nearby vessel to the format expected by linkVessel
+    // Convert the nearby vessel to the format expected by linkVesselToOrder
     const vesselToLink = {
       id: vessel.id,
-      name: vessel.vesselName,
-      vesselId: vessel.id,
       vesselName: vessel.vesselName,
       vesselType: vessel.vesselType || "Bulk Carrier",
-      dwt: vessel.vesselSize || 0,
-      built: vessel.vesselAge ? new Date().getFullYear() - vessel.vesselAge : 2020,
-      flag: vessel.vesselFlag || "Unknown",
+      vesselSize: vessel.vesselSize,
       openPort: vessel.openPort || vessel.loadPort,
       laycanStart: vessel.laycanStart || new Date().toISOString(),
       laycanEnd: vessel.laycanEnd || new Date().toISOString(),
       matchScore: Math.round(95 - vessel.distance * 0.2), // Higher score for closer vessels
-      status: "Shortlisted" as const,
-      linkedAt: new Date().toISOString(),
     }
 
-    linkVessel(order.id, vesselToLink)
+    linkVesselToOrder(order.id, vesselToLink)
 
     toast({
       title: "Vessel Added",

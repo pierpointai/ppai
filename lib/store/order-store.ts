@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { immer } from "@/lib/zustand-immer"
 import { toast } from "@/hooks/use-toast"
 
 export type OrderStatus = "Active" | "Matched" | "Fixed" | "Cancelled"
@@ -726,7 +727,7 @@ const createSampleOrders = (): Order[] => {
 
 export const useOrderStore = create<OrderStore>()(
   persist(
-    (set, get) => ({
+    immer((set, get) => ({
       orders: [],
       filters: {
         status: "All",
@@ -1159,7 +1160,7 @@ export const useOrderStore = create<OrderStore>()(
         const vessel = (order.linkedVessels || []).find((v) => v.vesselId === vesselId)
         return vessel?.statusHistory
       },
-    }),
+    })),
     {
       name: "order-storage",
       version: 6,

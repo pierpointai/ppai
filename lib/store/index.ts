@@ -1,18 +1,6 @@
-// Export all stores
-export * from "./offer-store"
-export * from "./favorite-store"
-export * from "./ui-store"
-export * from "./auth-store"
-
-// Export a hook to access all stores
-import { useOfferStore } from "./offer-store"
-import { useFavoriteStore } from "./favorite-store"
-import { useUIStore } from "./ui-store"
-import { useAuthStore } from "./auth-store"
-
-export const useStore = () => ({
-  offer: useOfferStore(),
-  favorite: useFavoriteStore(),
-  ui: useUIStore(),
-  auth: useAuthStore(),
-})
+export { useAuthStore } from "./auth-store"
+export { useNavigationStore } from "./navigation-store"
+export { useOfferStore } from "./offer-store"
+export { useOrderStore } from "./order-store"
+export { useFavoriteStore } from "./favorite-store"
+export { useUIStore } from "./ui-store"

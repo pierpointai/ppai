@@ -1,7 +1,7 @@
 import { create } from "zustand"
+import { immer } from "@/lib/zustand-immer"
 import { devtools } from "zustand/middleware"
 
-// Define the store state interface
 interface UIState {
   sidebarOpen: boolean
   filterPanelOpen: boolean
@@ -19,7 +19,6 @@ interface UIState {
   }[]
 }
 
-// Define the store actions interface
 interface UIActions {
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
@@ -37,14 +36,11 @@ interface UIActions {
   clearNotifications: () => void
 }
 
-// Combine state and actions
 type UIStore = UIState & UIActions
 
-// Create the store with middleware
 export const useUIStore = create<UIStore>()(
   devtools(
-    (set, get) => ({
-      // Initial state
+    immer((set) => ({
       sidebarOpen: true,
       filterPanelOpen: false,
       searchOpen: false,
@@ -54,84 +50,102 @@ export const useUIStore = create<UIStore>()(
       activeTab: "all",
       notifications: [],
 
-      // Actions
       toggleSidebar: () => {
-        set({ sidebarOpen: !get().sidebarOpen })
+        set((state) => {
+          state.sidebarOpen = !state.sidebarOpen
+        })
       },
 
       setSidebarOpen: (open) => {
-        set({ sidebarOpen: open })
+        set((state) => {
+          state.sidebarOpen = open
+        })
       },
 
       toggleFilterPanel: () => {
-        set({ filterPanelOpen: !get().filterPanelOpen })
+        set((state) => {
+          state.filterPanelOpen = !state.filterPanelOpen
+        })
       },
 
       setFilterPanelOpen: (open) => {
-        set({ filterPanelOpen: open })
+        set((state) => {
+          state.filterPanelOpen = open
+        })
       },
 
       toggleSearch: () => {
-        set({ searchOpen: !get().searchOpen })
+        set((state) => {
+          state.searchOpen = !state.searchOpen
+        })
       },
 
       setSearchOpen: (open) => {
-        set({ searchOpen: open })
+        set((state) => {
+          state.searchOpen = open
+        })
       },
 
       setCurrentView: (view) => {
-        set({ currentView: view })
+        set((state) => {
+          state.currentView = view
+        })
       },
 
       setTheme: (theme) => {
-        set({ theme })
+        set((state) => {
+          state.theme = theme
+        })
       },
 
       toggleMobileMenu: () => {
-        set({ mobileMenuOpen: !get().mobileMenuOpen })
+        set((state) => {
+          state.mobileMenuOpen = !state.mobileMenuOpen
+        })
       },
 
       setMobileMenuOpen: (open) => {
-        set({ mobileMenuOpen: open })
+        set((state) => {
+          state.mobileMenuOpen = open
+        })
       },
 
       setActiveTab: (tab) => {
-        set({ activeTab: tab })
+        set((state) => {
+          state.activeTab = tab
+        })
       },
 
       addNotification: (notification) => {
-        const currentNotifications = get().notifications
-        set({
-          notifications: [
-            {
-              id: Date.now().toString(),
-              ...notification,
-              read: false,
-              timestamp: new Date(),
-            },
-            ...currentNotifications,
-          ],
+        set((state) => {
+          state.notifications.unshift({
+            id: Date.now().toString(),
+            ...notification,
+            read: false,
+            timestamp: new Date(),
+          })
         })
       },
 
       markNotificationAsRead: (id) => {
-        const currentNotifications = get().notifications
-        set({
-          notifications: currentNotifications.map((n) =>
-            n.id === id ? { ...n, read: true } : n
-          ),
+        set((state) => {
+          const notification = state.notifications.find((n) => n.id === id)
+          if (notification) {
+            notification.read = true
+          }
         })
       },
 
       clearNotifications: () => {
-        set({ notifications: [] })
+        set((state) => {
+          state.notifications = []
+        })
       },
-    }),
+    })),
     { name: "ui-store" },
   ),
 )
 
-// Selector hooks for better performance
 export const useSidebarOpen = () => useUIStore((state) => state.sidebarOpen)
 export const useFilterPanelOpen = () => useUIStore((state) => state.filterPanelOpen)
 export const useSearchOpen = () => useUIStore((state) => state.searchOpen)

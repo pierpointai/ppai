@@ -1,54 +1,44 @@
 import { create } from "zustand"
+import { immer } from "@/lib/zustand-immer"
 
 interface NavigationState {
-  ordersPageContext: {
-    filter?: string
-    openAIMatching?: boolean
-    targetOrderId?: string
-  }
-  dashboardAlerts: Array<{
-    id: string
-    type: "urgent" | "unmatched" | "market" | "email"
-    title: string
-    message: string
-    action?: () => void
-    timestamp: Date
-  }>
+  currentPage: string
+  sidebarOpen: boolean
+  mobileMenuOpen: boolean
+  setCurrentPage: (page: string) => void
+  toggleSidebar: () => void
+  toggleMobileMenu: () => void
+  setSidebarOpen: (open: boolean) => void
 }
 
-interface NavigationActions {
-  setOrdersPageContext: (context: NavigationState["ordersPageContext"]) => void
-  clearOrdersPageContext: () => void
-  addDashboardAlert: (alert: Omit<NavigationState["dashboardAlerts"][0], "id" | "timestamp">) => void
-  removeDashboardAlert: (id: string) => void
-  clearDashboardAlerts: () => void
-}
+export const useNavigationStore = create<NavigationState>()(
+  immer((set) => ({
+    currentPage: "dashboard",
+    sidebarOpen: true,
+    mobileMenuOpen: false,
 
-export const useNavigationStore = create<NavigationState & NavigationActions>((set) => ({
-  ordersPageContext: {},
-  dashboardAlerts: [],
+    setCurrentPage: (page: string) => {
+      set((state) => {
+        state.currentPage = page
+      })
+    },
 
-  setOrdersPageContext: (context) =>
-    set((state) => ({ ordersPageContext: { ...state.ordersPageContext, ...context } })),
+    toggleSidebar: () => {
+      set((state) => {
+        state.sidebarOpen = !state.sidebarOpen
+      })
+    },
 
-  clearOrdersPageContext: () => set({ ordersPageContext: {} }),
+    toggleMobileMenu: () => {
+      set((state) => {
+        state.mobileMenuOpen = !state.mobileMenuOpen
+      })
+    },
 
-  addDashboardAlert: (alert) =>
-    set((state) => ({
-      dashboardAlerts: [
-        {
-          ...alert,
-          id: Date.now().toString(),
-          timestamp: new Date(),
-        },
-        ...state.dashboardAlerts,
-      ],
-    })),
-
-  removeDashboardAlert: (id) =>
-    set((state) => ({
-      dashboardAlerts: state.dashboardAlerts.filter((alert) => alert.id !== id),
-    })),
-
-  clearDashboardAlerts: () => set({ dashboardAlerts: [] }),
-}))
+    setSidebarOpen: (open: boolean) => {
+      set((state) => {
+        state.sidebarOpen = open
+      })
+    },
+  })),
+)
